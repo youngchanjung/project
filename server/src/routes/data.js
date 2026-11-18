@@ -102,7 +102,7 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
       throw Object.assign(new Error('dry-run'), { dryRunSummary: sum });
     }
     if (req.body?.recalc === '1') sum.shifted = (await applyRecalc(trx, pid, req.user)).length;
-    await audit(trx, { user: req.user, projectId: pid, entity: 'project', entityId: pid, action: 'import', label: `엑셀 불러오기: ${req.files.map(f => f.originalname).join(', ')} (작업 +${sum.tasksAdded}/갱신 ${sum.tasksUpdated}, 이슈 +${sum.issuesAdded}/갱신 ${sum.issuesUpdated})` });
+    await audit(trx, { user: req.user, projectId: pid, entity: 'project', entityId: pid, action: 'import', label: `엑셀 불러오기: ${req.files.map(f => Buffer.from(f.originalname, 'latin1').toString('utf8')).join(', ')} (작업 +${sum.tasksAdded}/갱신 ${sum.tasksUpdated}, 이슈 +${sum.issuesAdded}/갱신 ${sum.issuesUpdated})` });
     return sum;
   }).catch(e => { if (e.dryRunSummary) return { ...e.dryRunSummary, dryRun: true }; throw e; });
   res.json(summary);

@@ -1,4 +1,4 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import fs from 'node:fs';
@@ -6,6 +6,8 @@ import { fileURLToPath } from 'node:url';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 export const ROOT = path.resolve(here, '..', '..');
+// .env 는 저장소 최상위 폴더에 둠 (어느 폴더에서 실행하든 같은 파일 사용)
+dotenv.config({ path: path.join(ROOT, '.env'), quiet: true });
 
 const dataDir = path.resolve(ROOT, process.env.DATA_DIR || 'data');
 
