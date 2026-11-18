@@ -1,0 +1,65 @@
+import { useProject } from '../pages/Project.jsx';
+import { addD, diff, fmt, fmtY, dow, ddayTxt, issueOpen, issueLate } from '../util.js';
+
+export function TaskRow({ t, right }) {
+  const { color, openTask, phases } = useProject();
+  const ph = phases.find(p => p.id === t.phase_id);
+  return (
+    <div className="item" onClick={() => openTask(t.id)}>
+      <span className="dot" style={{ background: color(t.phase_id), marginTop: 6 }} />
+      <div className="main"><div className="t">{t.is_key ? '★ ' : ''}{t.name}</div>
+        <div className="small">{[ph?.name, `${fmt(t.start)}${t.end !== t.start ? '~' + fmt(t.end) : ''}`, t.owner].filter(Boolean).join(' · ')}</div></div>
+      {right}
+    </div>
+  );
+}
+
+export default function Dashboard() {
+  const { filtered: ts, issues, holidays, td, openIssue } = useProject();
+  const wk = addD(td, 7);
+  const late = ts.filter(t => t.st === '지연').sort((a, b) => a.end.localeCompare(b.end));
+  const prog = ts.filter(t => t.st === '진행중').sort((a, b) => a.end.localeCompare(b.end));
+  const week = ts.filter(t => t.st !== '완료' && t.st !== '지연' && ((t.start > td && t.start <= wk) || (t.end >= td && t.end <= wk)))
+    .sort((a, b) => (a.start > td ? a.start : a.end).localeCompare(b.start > td ? b.start : b.end));
+  const keys = ts.filter(t => t.is_key && t.st !== '완료' && t.start >= td).sort((a, b) => a.start.localeCompare(b.start)).slice(0, 10);
+  const io = issues.filter(issueOpen), il = io.filter(i => issueLate(i, td));
+  const ihigh = io.filter(i => i.priority === '상').sort((a, b) => (a.target || '9').localeCompare(b.target || '9'));
+  const hols = holidays.filter(h => h.date >= td && h.date <= addD(td, 30));
+  const done = ts.filter(t => t.st === '완료').length;
+
+  return (
+    <>
+      <div className="kpis">
+        <div className="kpi late">기한 초과 작업<b>{late.length}</b></div>
+        <div className="kpi prog">진행 중<b>{prog.length}</b></div>
+        <div className="kpi soon">7일 내 시작·마감<b>{week.length}</b></div>
+        <div className="kpi late">지연 이슈<b>{il.length}</b><span className="small">미해결 {io.length}건 중</span></div>
+        <div className="kpi done">완료<b>{done}</b><span className="small">전체 {ts.length}건 ({ts.length ? Math.round(done / ts.length * 100) : 0}%)</span></div>
+      </div>
+      <div className="grid2">
+        <div className="card"><h3>기한 초과 <span className="small">{late.length}건</span></h3><div className="list">
+          {late.map(t => <TaskRow key={t.id} t={t} right={<span className="dd" style={{ color: 'var(--late)' }}>{ddayTxt(diff(td, t.end))}</span>} />)}
+          {!late.length && <div className="empty">기한 초과 작업이 없습니다.</div>}</div></div>
+        <div className="card"><h3>앞으로 7일 <span className="small">{fmt(td)} ~ {fmt(wk)}</span></h3><div className="list">
+          {week.map(t => { const s = t.start > td, d = s ? t.start : t.end; return <TaskRow key={t.id} t={t} right={<span className={`badge ${s ? 'b-예정' : 'b-임박'}`}>{s ? '시작' : '마감'} {fmt(d)}({dow(d)})</span>} />; })}
+          {!week.length && <div className="empty">예정된 일정이 없습니다.</div>}</div></div>
+        <div className="card"><h3>진행 중 <span className="small">{prog.length}건</span></h3><div className="list">
+          {prog.map(t => <TaskRow key={t.id} t={t} right={<span className="dd">{ddayTxt(diff(td, t.end))}</span>} />)}
+          {!prog.length && <div className="empty">진행 중인 작업이 없습니다.</div>}</div></div>
+        <div className="card"><h3>중요(상) 미해결 이슈 <span className="small">{ihigh.length}건</span></h3><div className="list">
+          {ihigh.map(i => (
+            <div key={i.id} className="item" onClick={() => openIssue(i.id)}>
+              <div className="main"><div className="t">{i.title}</div><div className="small">{[i.code, i.party, i.owner].filter(Boolean).join(' · ')}</div></div>
+              <span className={`badge ${issueLate(i, td) ? 'b-지연' : 'b-예정'}`}>{i.target ? `목표 ${fmt(i.target)}` : '목표일 없음'}</span>
+            </div>))}
+          {!ihigh.length && <div className="empty">없음</div>}</div></div>
+        <div className="card"><h3>다가오는 핵심 일정 ★</h3><div className="list">
+          {keys.map(t => <TaskRow key={t.id} t={t} right={<span className="dd">{ddayTxt(diff(td, t.start))}</span>} />)}
+          {!keys.length && <div className="empty">없음 (작업을 ‘핵심’으로 표시하면 여기에 나옵니다)</div>}</div></div>
+        <div className="card"><h3>30일 내 공휴일</h3><div className="list">
+          {hols.map(h => <div key={h.id} className="item"><div className="main">{h.name} <span className="small">({h.country})</span></div><span className="small">{fmtY(h.date)} ({dow(h.date)})</span></div>)}
+          {!hols.length && <div className="empty">없음</div>}</div></div>
+      </div>
+    </>
+  );
+}
