@@ -3,11 +3,16 @@ import { fileURLToPath } from 'node:url';
 import { db } from './db.js';
 import { migrate } from './migrations.js';
 import { KR_HOLIDAYS } from './holidaysKR.js';
+import { VN_HOLIDAYS } from './holidaysVN.js';
 
 export async function prepareDb() {
   const applied = await migrate(db);
   if (applied.includes('001_initial')) {
-    for (const [date, name] of KR_HOLIDAYS) await db('holidays').insert({ country: 'KR', date, name });
+    for (const [country, list] of [['KR', KR_HOLIDAYS], ['VN', VN_HOLIDAYS]]) {
+      for (const [date, name] of list) {
+        if (!(await db('holidays').where({ country, date }).first())) await db('holidays').insert({ country, date, name });
+      }
+    }
   }
   return applied;
 }
