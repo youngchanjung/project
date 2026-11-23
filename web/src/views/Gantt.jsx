@@ -74,10 +74,10 @@ export default function Gantt() {
         </div>
       </div>
       <div className="gwrap" ref={wrap}>
-        <div style={{ width: W + 340 }}>
+        <div style={{ width: W + 400 }}>
           <div className="ghead"><div className="glabel">{tr('작업')}</div><div className="gscale" style={{ width: W }}>{scale}</div></div>
           <div style={{ position: 'relative' }}>
-            <div style={{ position: 'absolute', left: 340, top: 0, bottom: 0, width: W, pointerEvents: 'none' }}>
+            <div style={{ position: 'absolute', left: 400, top: 0, bottom: 0, width: W, pointerEvents: 'none' }}>
               {bg}<div className="todayline" style={{ left: x(td) + ppd / 2 }} title={tr('오늘')} />
             </div>
             {rows}

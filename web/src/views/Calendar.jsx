@@ -41,7 +41,7 @@ export default function Calendar() {
     <>
       <div className="toolbar">
         <button className="btn" onClick={() => setM(monthAdd(m, -1))}>◀</button>
-        <b style={{ fontSize: 18, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
+        <b style={{ fontSize: 21, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
         <button className="btn" onClick={() => setM(monthAdd(m, 1))}>▶</button>
         <button className="btn" onClick={() => { setM(td.slice(0, 7)); setSel(td); }}>{tr('오늘')}</button>
         <span className="small">{tr('▶ 시작 · ■ 마감 · ★ 핵심 · 날짜를 누르면 그날 진행 중인 작업을 오른쪽에 보여줍니다')}{can() ? ` · ${tr('두 번 누르면 그 날짜로 작업 추가')}` : ''}</span>

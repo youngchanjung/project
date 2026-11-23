@@ -170,8 +170,22 @@ const migrations = [
     }
   },
   {
+    // 공휴일 기본값 보강: 한국 2027(노동절·제헌절 포함), 베트남 2026·2027. 이미 있는 날짜는 건드리지 않음
+    name: '004_holidays_2027',
+    async up(k) {
+      const { KR_HOLIDAYS } = await import('./holidaysKR.js');
+      const { VN_HOLIDAYS } = await import('./holidaysVN.js');
+      for (const [country, list] of [['KR', KR_HOLIDAYS.filter(([d]) => d >= '2027')], ['VN', VN_HOLIDAYS]]) {
+        for (const [date, name] of list) {
+          const ex = await k('holidays').where({ country, date }).first();
+          if (!ex) await k('holidays').insert({ country, date, name });
+        }
+      }
+    }
+  },
+  {
     // 회의록: 녹음 파일, 음성인식 결과(전사본), AI 정리 결과
-    name: '004_meetings',
+    name: '005_meetings',
     async up(k) {
       await k.schema.createTable('meetings', t => {
         t.increments('id');
