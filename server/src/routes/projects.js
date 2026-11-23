@@ -105,7 +105,7 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
   const p = await loadProject(id);
   await db.transaction(async trx => {
     for (const t of ['issue_comments']) await trx(t).whereIn('issue_id', trx('issues').select('id').where({ project_id: id })).del();
-    for (const t of ['dependencies', 'issues', 'tasks', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
+    for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
   });

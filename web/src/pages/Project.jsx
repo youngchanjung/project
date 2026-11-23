@@ -9,6 +9,7 @@ import Calendar from '../views/Calendar.jsx';
 import TaskList from '../views/TaskList.jsx';
 import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
+import Meetings from '../views/Meetings.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
 import { tr } from '../i18n.js';
@@ -61,7 +62,7 @@ export default function Project() {
     afterSave: r => { if (r?.shifted?.length) toast(tr('선행관계에 따라 작업 {n}건의 날짜가 자동으로 조정되었습니다.', { n: r.shifted.length })); return reload(); }
   };
   const p = data.project;
-  const tabs = [['', tr('대시보드')], ['gantt', tr('간트')], ['calendar', tr('달력')], ['tasks', tr('작업 목록')], ['issues', `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`], ['settings', tr('설정')]];
+  const tabs = [['', tr('대시보드')], ['gantt', tr('간트')], ['calendar', tr('달력')], ['tasks', tr('작업 목록')], ['issues', `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`], ['meetings', tr('회의록')], ['settings', tr('설정')]];
 
   return (
     <Ctx.Provider value={ctx}>
@@ -75,7 +76,7 @@ export default function Project() {
           {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr('+ 작업')}</button>}
         </div>
         <nav className="tabs">
-          {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}${k ? '/' + k : ''}`} end className="tab">{n}</NavLink>)}
+          {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}${k ? '/' + k : ''}`} end={k !== 'meetings'} className="tab">{n}</NavLink>)}
         </nav>
         <Routes>
           <Route index element={<><FilterBar /><Dashboard /></>} />
@@ -83,6 +84,7 @@ export default function Project() {
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />
+          <Route path="meetings/*" element={<Meetings />} />
           <Route path="settings" element={<Settings />} />
           <Route path="*" element={<Navigate to={`/projects/${id}`} />} />
         </Routes>

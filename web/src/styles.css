@@ -25,7 +25,7 @@ a{color:var(--accent);text-decoration:none}
 .btn.sm{padding:3px 8px;font-size:12.5px}
 .small{font-size:12px;color:var(--muted)}
 .muted{color:var(--muted)}
-input[type=text],input[type=search],input[type=password],input[type=date],input[type=number],input[type=email],select,textarea{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:5px 9px;min-width:0}
+input[type=text],input[type=search],input[type=password],input[type=date],input[type=datetime-local],input[type=number],input[type=email],select,textarea{border:1px solid var(--line);background:var(--panel);border-radius:8px;padding:5px 9px;min-width:0}
 textarea{width:100%;min-height:70px;resize:vertical}
 main.page{padding:18px 20px 60px;max-width:1600px;margin:0 auto}
 h1.title{font-size:20px;margin:0 0 14px}
@@ -123,3 +123,20 @@ td input,td select{width:100%;padding:2px 5px;font-size:13px}
 .comments{display:flex;flex-direction:column;gap:8px;margin-top:8px}
 .comment{background:var(--bg);border-radius:8px;padding:8px 10px}
 .loading{padding:40px;text-align:center;color:var(--muted)}
+
+/* 회의록 */
+.recdot{width:12px;height:12px;border-radius:50%;background:var(--plan);display:inline-block}
+.recdot.on{background:var(--late);animation:recblink 1s infinite}
+@keyframes recblink{50%{opacity:.3}}
+.rectime{font-variant-numeric:tabular-nums;font-size:18px}
+.meter{display:inline-block;width:120px;height:8px;border-radius:4px;background:var(--plan-soft);overflow:hidden}
+.meter i{display:block;height:100%;background:var(--done);transition:width .2s}
+.mt-ul{margin:4px 0 0;padding-left:20px}
+.mt-ul li{margin:2px 0}
+.transcript{max-height:calc(100vh - 300px);overflow:auto}
+.tline{display:grid;grid-template-columns:48px 90px 1fr;gap:8px;padding:4px 0;border-top:1px solid var(--line)}
+.tline:first-child{border-top:0}
+.tline a{cursor:pointer}
+.spk{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.spk0{color:#2f6fde}.spk1{color:#2e9e5b}.spk2{color:#d98a00}.spk3{color:#8e5bd8}.spk4{color:#d6453d}.spk5{color:#0f8f9a}
+@media(max-width:600px){.tline{grid-template-columns:40px 1fr}.tline span{grid-column:1/-1}}
