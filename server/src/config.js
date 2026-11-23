@@ -35,5 +35,7 @@ export const config = {
   webDist: path.join(ROOT, 'web', 'dist'),
   backupDir: path.resolve(ROOT, process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
   backupCopyDir: process.env.BACKUP_COPY_DIR ? path.resolve(ROOT, process.env.BACKUP_COPY_DIR) : null,
+  // DeepL 번역 (입력 내용 번역). 키가 없으면 번역 기능만 꺼지고 나머지는 그대로 동작
+  deeplKey: process.env.DEEPL_API_KEY || '',
   backupKeep: Math.max(1, Number(process.env.BACKUP_KEEP || 12))
 };

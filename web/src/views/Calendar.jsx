@@ -2,6 +2,8 @@ import { useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
 import { TaskRow } from './Dashboard.jsx';
 import { addD, fmtY, dow, weekday, monthAdd } from '../util.js';
+import { tr, locale } from '../i18n.js';
+import { Tx } from '../contentTr.jsx';
 
 export default function Calendar() {
   const { filtered: ts, holidays, td, color, openTask, can } = useProject();
@@ -28,9 +30,9 @@ export default function Calendar() {
         {evs.slice(0, 4).map(([t, p]) => (
           <div key={t.id} className="ev" title={t.name} onClick={e => { e.stopPropagation(); openTask(t.id); }}
             style={{ borderColor: color(t.phase_id), background: color(t.phase_id) + '1f', ...(t.st === '완료' ? { opacity: .55, textDecoration: 'line-through' } : {}), ...(t.st === '지연' ? { color: 'var(--late)', fontWeight: 700 } : {}) }}>
-            {p}{t.is_key ? '★' : ''}{t.name}</div>
+            {p}{t.is_key ? '★' : ''}<Tx>{t.name}</Tx></div>
         ))}
-        {evs.length > 4 && <div className="small">+{evs.length - 4}건</div>}
+        {evs.length > 4 && <div className="small">+{evs.length - 4}{tr('건')}</div>}
       </div>
     );
   }
@@ -39,17 +41,17 @@ export default function Calendar() {
     <>
       <div className="toolbar">
         <button className="btn" onClick={() => setM(monthAdd(m, -1))}>◀</button>
-        <b style={{ fontSize: 18, minWidth: 120, textAlign: 'center' }}>{m.slice(0, 4)}년 {+m.slice(5)}월</b>
+        <b style={{ fontSize: 18, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
         <button className="btn" onClick={() => setM(monthAdd(m, 1))}>▶</button>
-        <button className="btn" onClick={() => { setM(td.slice(0, 7)); setSel(td); }}>오늘</button>
-        <span className="small">▶ 시작 · ■ 마감 · ★ 핵심 · 날짜를 누르면 그날 진행 중인 작업을 오른쪽에 보여줍니다{can() ? ' · 두 번 누르면 그 날짜로 작업 추가' : ''}</span>
+        <button className="btn" onClick={() => { setM(td.slice(0, 7)); setSel(td); }}>{tr('오늘')}</button>
+        <span className="small">{tr('▶ 시작 · ■ 마감 · ★ 핵심 · 날짜를 누르면 그날 진행 중인 작업을 오른쪽에 보여줍니다')}{can() ? ` · ${tr('두 번 누르면 그 날짜로 작업 추가')}` : ''}</span>
       </div>
       <div className="calwrap">
-        <div className="cal">{['월', '화', '수', '목', '금', '토', '일'].map(x => <div key={x} className="dow">{x}</div>)}{cells}</div>
-        <div className="card"><h3>{fmtY(sel)} ({dow(sel)}) <span className="small">{active.length}건</span></h3>
-          {hm.has(sel) && <div className="badge b-지연" style={{ marginBottom: 8 }}>공휴일 · {hm.get(sel)}</div>}
-          <div className="list">{active.map(t => <TaskRow key={t.id} t={t} right={<span className={`badge b-${t.st}`}>{t.st}</span>} />)}
-            {!active.length && <div className="empty">이 날 진행되는 작업이 없습니다.</div>}</div></div>
+        <div className="cal">{['2026-11-23', '2026-11-24', '2026-11-25', '2026-11-26', '2026-11-27', '2026-11-28', '2026-11-29'].map(x => <div key={x} className="dow">{dow(x)}</div>)}{cells}</div>
+        <div className="card"><h3>{fmtY(sel)} ({dow(sel)}) <span className="small">{active.length}{tr('건')}</span></h3>
+          {hm.has(sel) && <div className="badge b-지연" style={{ marginBottom: 8 }}>{tr('공휴일 ·')} {hm.get(sel)}</div>}
+          <div className="list">{active.map(t => <TaskRow key={t.id} t={t} right={<span className={`badge b-${t.st}`}>{tr(t.st)}</span>} />)}
+            {!active.length && <div className="empty">{tr('이 날 진행되는 작업이 없습니다.')}</div>}</div></div>
       </div>
     </>
   );

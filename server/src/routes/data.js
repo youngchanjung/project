@@ -159,7 +159,10 @@ holidaysRouter.post('/bulk', requireAdmin, ah(async (req, res) => {
     if (!m || !isDate(date)) { bad.push(line.trim()); continue; }
     rows.push({ country, date, name: m[4].trim().slice(0, 200) });
   }
-  if (bad.length) throw new HttpError(400, `날짜를 읽지 못한 줄: ${bad.slice(0, 5).join(' / ')}${bad.length > 5 ? ` 외 ${bad.length - 5}줄` : ''}`);
+  if (bad.length) {
+    const list = bad.slice(0, 5).join(' / ') + (bad.length > 5 ? ` (+${bad.length - 5})` : '');
+    throw new HttpError(400, `날짜를 읽지 못한 줄: ${list}`);
+  }
   const have = new Set((await db('holidays').where({ country }).select('date')).map(r => r.date));
   const add = [...new Map(rows.filter(r => !have.has(r.date)).map(r => [r.date, r])).values()];
   if (add.length) await db.transaction(async trx => {

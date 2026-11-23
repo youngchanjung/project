@@ -7,6 +7,8 @@ import { config } from './config.js';
 import { prepareDb } from './migrate.js';
 import { loadUser } from './auth.js';
 import { HttpError } from './util.js';
+import { translateMsg, reqLang } from './i18n.js';
+import { translateRouter } from './routes/translate.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
 import { backupRouter } from './routes/backup.js';
@@ -28,6 +30,7 @@ export function createApp() {
   api.use('/users', usersRouter);
   api.use('/departments', departmentsRouter);
   api.use('/backup', backupRouter);
+  api.use('/translate', translateRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
   api.use('/projects', projectsRouter);
@@ -48,10 +51,10 @@ export function createApp() {
   }
 
   // 오류 처리
-  app.use((err, _req, res, _next) => {
+  app.use((err, req, res, _next) => {
     const status = err.status || (err.type === 'entity.parse.failed' ? 400 : 500);
     if (status >= 500) console.error(err);
-    res.status(status).json({ error: status >= 500 ? '서버 오류가 발생했습니다.' : err.message, ...(err.extra || {}) });
+    res.status(status).json({ error: translateMsg(status >= 500 ? '서버 오류가 발생했습니다.' : err.message, reqLang(req)), ...(err.extra || {}) });
   });
   return app;
 }

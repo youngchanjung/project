@@ -1,4 +1,5 @@
 // 날짜·상태 도우미 (날짜는 'YYYY-MM-DD' 문자열)
+import { locale, tr } from './i18n.js';
 const D = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 export const S = d => d.toISOString().slice(0, 10);
 export const addD = (s, n) => { const d = D(s); d.setUTCDate(d.getUTCDate() + n); return S(d); };
@@ -6,8 +7,8 @@ export const diff = (a, b) => Math.round((D(b) - D(a)) / 864e5);
 export const today = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
 export const fmt = s => s ? `${+s.slice(5, 7)}/${+s.slice(8, 10)}` : '';
 export const fmtY = s => s ? s.replace(/-/g, '.') : '';
-const DOW = ['일', '월', '화', '수', '목', '금', '토'];
-export const dow = s => DOW[D(s).getUTCDay()];
+// 요일 약칭 (화면 언어에 맞춤: 월 / Th 2 / Mon)
+export const dow = s => new Intl.DateTimeFormat(locale(), { weekday: 'short', timeZone: 'UTC' }).format(D(s));
 export const weekday = s => D(s).getUTCDay();
 export const ddayTxt = n => n === 0 ? 'D-Day' : n > 0 ? `D-${n}` : `D+${-n}`;
 export const monthAdd = (ym, n) => { const d = D(ym + '-01'); d.setUTCMonth(d.getUTCMonth() + n); return S(d).slice(0, 7); };
@@ -38,7 +39,7 @@ export const ROLE_NAME = { pm: 'PM', member: '참여자', viewer: '조회자' };
 
 export function downloadCSV(name, cols, rows) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;
-  const txt = '﻿' + [cols.map(c => q(c[1])).join(','), ...rows.map(r => cols.map(c => q(typeof c[0] === 'function' ? c[0](r) : r[c[0]])).join(','))].join('\r\n');
+  const txt = '﻿' + [cols.map(c => q(tr(c[1]))).join(','), ...rows.map(r => cols.map(c => q(typeof c[0] === 'function' ? c[0](r) : r[c[0]])).join(','))].join('\r\n');
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' }));
   a.download = `${name}_${today()}.csv`; a.click();

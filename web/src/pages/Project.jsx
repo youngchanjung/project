@@ -11,6 +11,7 @@ import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
+import { tr } from '../i18n.js';
 
 const Ctx = createContext(null);
 export const useProject = () => useContext(Ctx);
@@ -47,7 +48,7 @@ export default function Project() {
   }, [tasks, filter]);
 
   if (err) return <main className="page"><div className="err">{err}</div></main>;
-  if (!data) return <div className="loading">불러오는 중…</div>;
+  if (!data) return <div className="loading">{tr('불러오는 중…')}</div>;
 
   const role = data.role;
   const can = (need = 'member') => RANK[role] >= RANK[need];
@@ -57,21 +58,21 @@ export default function Project() {
     openTask: (taskId, preset) => setModal({ kind: 'task', id: taskId ?? null, preset }),
     openIssue: (issueId, preset) => setModal({ kind: 'issue', id: issueId ?? null, preset }),
     // 저장 결과로 자동 조정된 작업이 있으면 알림
-    afterSave: r => { if (r?.shifted?.length) toast(`선행관계에 따라 작업 ${r.shifted.length}건의 날짜가 자동으로 조정되었습니다.`); return reload(); }
+    afterSave: r => { if (r?.shifted?.length) toast(tr('선행관계에 따라 작업 {n}건의 날짜가 자동으로 조정되었습니다.', { n: r.shifted.length })); return reload(); }
   };
   const p = data.project;
-  const tabs = [['', '대시보드'], ['gantt', '간트'], ['calendar', '달력'], ['tasks', '작업 목록'], ['issues', `이슈 (${data.issues.filter(i => i.status !== '해결완료').length})`], ['settings', '설정']];
+  const tabs = [['', tr('대시보드')], ['gantt', tr('간트')], ['calendar', tr('달력')], ['tasks', tr('작업 목록')], ['issues', `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`], ['settings', tr('설정')]];
 
   return (
     <Ctx.Provider value={ctx}>
       <main className="page">
         <div className="toolbar" style={{ marginBottom: 6 }}>
           <h1 className="title" style={{ margin: 0 }}>{p.name}</h1>
-          <span className="small">{[p.code, p.client, `내 역할: ${ROLE_NAME[role]}`, p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준'].filter(Boolean).join(' · ')}</span>
-          {p.archived && <span className="badge b-보류">보관됨</span>}
+          <span className="small">{[p.code, p.client, `${tr('내 역할')}: ${tr(ROLE_NAME[role])}`, tr(p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준')].filter(Boolean).join(' · ')}</span>
+          {p.archived && <span className="badge b-보류">{tr('보관됨')}</span>}
           <div className="sp" />
-          {can() && <button className="btn" onClick={() => ctx.openIssue(null)}>+ 이슈</button>}
-          {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>+ 작업</button>}
+          {can() && <button className="btn" onClick={() => ctx.openIssue(null)}>{tr('+ 이슈')}</button>}
+          {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr('+ 작업')}</button>}
         </div>
         <nav className="tabs">
           {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}${k ? '/' + k : ''}`} end className="tab">{n}</NavLink>)}
@@ -94,19 +95,19 @@ export default function Project() {
 
 function FilterBar() {
   const { phases, filter, setFilter, color, tasks } = useProject();
-  const groups = [...phases.filter(p => tasks.some(t => t.phase_id === p.id)).map(p => ({ id: p.id, name: p.name })), ...(tasks.some(t => !t.phase_id) ? [{ id: 0, name: '단계 없음' }] : [])];
+  const groups = [...phases.filter(p => tasks.some(t => t.phase_id === p.id)).map(p => ({ id: p.id, name: p.name })), ...(tasks.some(t => !t.phase_id) ? [{ id: 0, name: tr('단계 없음') }] : [])];
   const toggle = (gid, e) => {
     if (e.ctrlKey || e.metaKey) return setFilter({ ...filter, off: groups.map(g => g.id).filter(x => x !== gid) });
     setFilter({ ...filter, off: filter.off.includes(gid) ? filter.off.filter(x => x !== gid) : [...filter.off, gid] });
   };
   return (
     <div className="toolbar">
-      <input type="search" placeholder="작업명·담당·ID 검색" value={filter.q} onChange={e => setFilter({ ...filter, q: e.target.value })} style={{ width: 200 }} />
-      <span className={`chip ${filter.hideDone ? 'on' : ''}`} onClick={() => setFilter({ ...filter, hideDone: !filter.hideDone })}>완료 숨기기</span>
-      <span className="small">단계:</span>
-      <span className="chip" onClick={() => setFilter({ ...filter, off: filter.off.length ? [] : groups.map(g => g.id) })} title="모두 켜기/끄기">전체</span>
+      <input type="search" placeholder={tr('작업명·담당·ID 검색')} value={filter.q} onChange={e => setFilter({ ...filter, q: e.target.value })} style={{ width: 200 }} />
+      <span className={`chip ${filter.hideDone ? 'on' : ''}`} onClick={() => setFilter({ ...filter, hideDone: !filter.hideDone })}>{tr('완료 숨기기')}</span>
+      <span className="small">{tr('단계:')}</span>
+      <span className="chip" onClick={() => setFilter({ ...filter, off: filter.off.length ? [] : groups.map(g => g.id) })} title={tr('모두 켜기/끄기')}>{tr('전체')}</span>
       {groups.map(g => (
-        <span key={g.id} className={`chip ${filter.off.includes(g.id) ? '' : 'on'}`} onClick={e => toggle(g.id, e)} title="Ctrl+클릭: 이 단계만 보기">
+        <span key={g.id} className={`chip ${filter.off.includes(g.id) ? '' : 'on'}`} onClick={e => toggle(g.id, e)} title={tr('Ctrl+클릭: 이 단계만 보기')}>
           <span className="dot" style={{ background: g.id ? color(g.id) : '#8a93a6' }} />{g.name}
         </span>
       ))}

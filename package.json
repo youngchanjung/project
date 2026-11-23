@@ -10,7 +10,8 @@
     "start": "npm run start -w server",
     "migrate": "npm run migrate -w server",
     "backup": "npm run backup -w server",
-    "test": "npm test -w server"
+    "test": "npm test -w server",
+    "i18n:check": "node scripts/i18n.mjs"
   },
   "engines": { "node": ">=20" }
 }

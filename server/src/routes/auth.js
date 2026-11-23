@@ -42,3 +42,11 @@ authRouter.post('/password', requireLogin, ah(async (req, res) => {
   await db('users').where({ id: req.user.id }).update({ password_hash: await hashPassword(next) });
   res.json({ ok: true });
 }));
+
+// 화면 언어 저장
+authRouter.post('/lang', requireLogin, ah(async (req, res) => {
+  const lang = String(req.body?.lang || '');
+  if (!['ko', 'vi', 'en'].includes(lang)) throw new HttpError(400, '지원하지 않는 언어입니다.');
+  await db('users').where({ id: req.user.id }).update({ lang });
+  res.json({ ok: true });
+}));

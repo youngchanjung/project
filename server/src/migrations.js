@@ -151,6 +151,23 @@ const migrations = [
         t.string('last_login_at', 32);
       });
     }
+  },
+  {
+    // 화면 언어(ko/vi/en)와 입력 내용 번역 결과 저장 (DeepL 호출을 줄이기 위해 같은 문장은 다시 번역하지 않음)
+    name: '003_i18n',
+    async up(k) {
+      await k.schema.alterTable('users', t => { t.string('lang', 5); });
+      await k.schema.createTable('translations', t => {
+        t.increments('id');
+        t.string('src_hash', 64).notNullable(); // 원문 SHA-256
+        t.string('target', 5).notNullable(); // ko | vi | en
+        t.text('src').notNullable();
+        t.text('text').notNullable();
+        t.string('detected', 5); // DeepL 이 감지한 원문 언어
+        t.string('created_at', 32);
+        t.unique(['src_hash', 'target']);
+      });
+    }
   }
 ];
 

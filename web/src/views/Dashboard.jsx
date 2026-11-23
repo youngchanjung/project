@@ -1,5 +1,7 @@
 import { useProject } from '../pages/Project.jsx';
 import { addD, diff, fmt, fmtY, dow, ddayTxt, issueOpen, issueLate } from '../util.js';
+import { tr } from '../i18n.js';
+import { Tx } from '../contentTr.jsx';
 
 export function TaskRow({ t, right }) {
   const { color, openTask, phases } = useProject();
@@ -7,7 +9,7 @@ export function TaskRow({ t, right }) {
   return (
     <div className="item" onClick={() => openTask(t.id)}>
       <span className="dot" style={{ background: color(t.phase_id), marginTop: 6 }} />
-      <div className="main"><div className="t">{t.is_key ? '★ ' : ''}{t.name}</div>
+      <div className="main"><div className="t">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
         <div className="small">{[ph?.name, `${fmt(t.start)}${t.end !== t.start ? '~' + fmt(t.end) : ''}`, t.owner].filter(Boolean).join(' · ')}</div></div>
       {right}
     </div>
@@ -30,35 +32,35 @@ export default function Dashboard() {
   return (
     <>
       <div className="kpis">
-        <div className="kpi late">기한 초과 작업<b>{late.length}</b></div>
-        <div className="kpi prog">진행 중<b>{prog.length}</b></div>
-        <div className="kpi soon">7일 내 시작·마감<b>{week.length}</b></div>
-        <div className="kpi late">지연 이슈<b>{il.length}</b><span className="small">미해결 {io.length}건 중</span></div>
-        <div className="kpi done">완료<b>{done}</b><span className="small">전체 {ts.length}건 ({ts.length ? Math.round(done / ts.length * 100) : 0}%)</span></div>
+        <div className="kpi late">{tr('기한 초과 작업')}<b>{late.length}</b></div>
+        <div className="kpi prog">{tr('진행 중')}<b>{prog.length}</b></div>
+        <div className="kpi soon">{tr('7일 내 시작·마감')}<b>{week.length}</b></div>
+        <div className="kpi late">{tr('지연 이슈')}<b>{il.length}</b><span className="small">{tr('미해결')} {io.length}{tr('건 중')}</span></div>
+        <div className="kpi done">{tr('완료')}<b>{done}</b><span className="small">{tr('전체 {n}건', { n: ts.length })} ({ts.length ? Math.round(done / ts.length * 100) : 0}%)</span></div>
       </div>
       <div className="grid2">
-        <div className="card"><h3>기한 초과 <span className="small">{late.length}건</span></h3><div className="list">
+        <div className="card"><h3>{tr('기한 초과')} <span className="small">{late.length}{tr('건')}</span></h3><div className="list">
           {late.map(t => <TaskRow key={t.id} t={t} right={<span className="dd" style={{ color: 'var(--late)' }}>{ddayTxt(diff(td, t.end))}</span>} />)}
-          {!late.length && <div className="empty">기한 초과 작업이 없습니다.</div>}</div></div>
-        <div className="card"><h3>앞으로 7일 <span className="small">{fmt(td)} ~ {fmt(wk)}</span></h3><div className="list">
-          {week.map(t => { const s = t.start > td, d = s ? t.start : t.end; return <TaskRow key={t.id} t={t} right={<span className={`badge ${s ? 'b-예정' : 'b-임박'}`}>{s ? '시작' : '마감'} {fmt(d)}({dow(d)})</span>} />; })}
-          {!week.length && <div className="empty">예정된 일정이 없습니다.</div>}</div></div>
-        <div className="card"><h3>진행 중 <span className="small">{prog.length}건</span></h3><div className="list">
+          {!late.length && <div className="empty">{tr('기한 초과 작업이 없습니다.')}</div>}</div></div>
+        <div className="card"><h3>{tr('앞으로 7일')} <span className="small">{fmt(td)} ~ {fmt(wk)}</span></h3><div className="list">
+          {week.map(t => { const s = t.start > td, d = s ? t.start : t.end; return <TaskRow key={t.id} t={t} right={<span className={`badge ${s ? 'b-예정' : 'b-임박'}`}>{tr(s ? '시작' : '마감')} {fmt(d)}({dow(d)})</span>} />; })}
+          {!week.length && <div className="empty">{tr('예정된 일정이 없습니다.')}</div>}</div></div>
+        <div className="card"><h3>{tr('진행 중')} <span className="small">{prog.length}{tr('건')}</span></h3><div className="list">
           {prog.map(t => <TaskRow key={t.id} t={t} right={<span className="dd">{ddayTxt(diff(td, t.end))}</span>} />)}
-          {!prog.length && <div className="empty">진행 중인 작업이 없습니다.</div>}</div></div>
-        <div className="card"><h3>중요(상) 미해결 이슈 <span className="small">{ihigh.length}건</span></h3><div className="list">
+          {!prog.length && <div className="empty">{tr('진행 중인 작업이 없습니다.')}</div>}</div></div>
+        <div className="card"><h3>{tr('중요(상) 미해결 이슈')} <span className="small">{ihigh.length}{tr('건')}</span></h3><div className="list">
           {ihigh.map(i => (
             <div key={i.id} className="item" onClick={() => openIssue(i.id)}>
-              <div className="main"><div className="t">{i.title}</div><div className="small">{[i.code, i.party, i.owner].filter(Boolean).join(' · ')}</div></div>
-              <span className={`badge ${issueLate(i, td) ? 'b-지연' : 'b-예정'}`}>{i.target ? `목표 ${fmt(i.target)}` : '목표일 없음'}</span>
+              <div className="main"><div className="t"><Tx>{i.title}</Tx></div><div className="small">{[i.code, i.party, i.owner].filter(Boolean).join(' · ')}</div></div>
+              <span className={`badge ${issueLate(i, td) ? 'b-지연' : 'b-예정'}`}>{i.target ? `${tr('목표')} ${fmt(i.target)}` : tr('목표일 없음')}</span>
             </div>))}
-          {!ihigh.length && <div className="empty">없음</div>}</div></div>
-        <div className="card"><h3>다가오는 핵심 일정 ★</h3><div className="list">
+          {!ihigh.length && <div className="empty">{tr('없음')}</div>}</div></div>
+        <div className="card"><h3>{tr('다가오는 핵심 일정 ★')}</h3><div className="list">
           {keys.map(t => <TaskRow key={t.id} t={t} right={<span className="dd">{ddayTxt(diff(td, t.start))}</span>} />)}
-          {!keys.length && <div className="empty">없음 (작업을 ‘핵심’으로 표시하면 여기에 나옵니다)</div>}</div></div>
-        <div className="card"><h3>30일 내 공휴일</h3><div className="list">
+          {!keys.length && <div className="empty">{tr('없음 (작업을 ‘핵심’으로 표시하면 여기에 나옵니다)')}</div>}</div></div>
+        <div className="card"><h3>{tr('30일 내 공휴일')}</h3><div className="list">
           {hols.map(h => <div key={h.id} className="item"><div className="main">{h.name} <span className="small">({h.country})</span></div><span className="small">{fmtY(h.date)} ({dow(h.date)})</span></div>)}
-          {!hols.length && <div className="empty">없음</div>}</div></div>
+          {!hols.length && <div className="empty">{tr('없음')}</div>}</div></div>
       </div>
     </>
   );

@@ -88,3 +88,26 @@ test('공휴일: 목록에 있는 나라만 허용, 여러 날 붙여넣기, 프
   assert.equal(p.status, 200);
   assert.equal(p.body.calendars ?? (await call('GET', `/projects/${p.body.id}`)).body.project?.calendars, 'VN');
 });
+
+test('언어: 오류 메시지는 X-Lang 에 맞춰 번역, 사용자 언어 저장', async () => {
+  const r = await fetch(base + '/api/departments', { method: 'POST', headers: { cookie, 'Content-Type': 'application/json', 'X-Lang': 'en' }, body: JSON.stringify({ name: '연구소' }) });
+  assert.equal(r.status, 400);
+  assert.match((await r.json()).error, /already exists/i);
+  const vi = await fetch(base + '/api/projects', { method: 'POST', headers: { cookie, 'Content-Type': 'application/json', 'X-Lang': 'vi' }, body: JSON.stringify({ name: ' ' }) });
+  assert.equal((await vi.json()).error, 'Vui lòng nhập tên dự án.');
+  assert.equal((await call('POST', '/auth/lang', { lang: 'vi' })).status, 200);
+  assert.equal((await call('GET', '/auth/me')).body.user?.lang ?? (await call('GET', '/auth/me')).body.lang, 'vi');
+});
+
+test('내용 번역: 같은 문장은 저장된 번역을 쓰고 DeepL 은 한 번만 호출', async () => {
+  const { translateTexts } = await import('../src/translate.js');
+  let calls = 0;
+  const fetcher = async (texts, target) => { calls++; return texts.map(t => ({ detected_source_language: t.startsWith('Hello') ? 'EN' : 'KO', text: `[${target}] ${t}` })); };
+  const a = await translateTexts(['시험 계획', 'Hello', '시험 계획', ''], 'en', { fetcher });
+  assert.deepEqual(a, ['[en] 시험 계획', 'Hello', '[en] 시험 계획', '']);
+  const b = await translateTexts(['시험 계획'], 'en', { fetcher });
+  assert.deepEqual(b, ['[en] 시험 계획']);
+  assert.equal(calls, 1);
+  const off = await call('POST', '/translate', { target: 'en', texts: ['x'] });
+  assert.equal(off.status, 503); // 키가 없으면 꺼짐
+});
