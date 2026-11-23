@@ -182,6 +182,16 @@ const migrations = [
         }
       }
     }
+  },
+  {
+    // 2026년부터 노동절·제헌절이 공휴일 (관공서의 공휴일에 관한 규정 2026.4.30. 개정)
+    name: '005_kr_2026_labor_constitution',
+    async up(k) {
+      for (const [date, name] of [['2026-05-01', '노동절'], ['2026-07-17', '제헌절']]) {
+        const ex = await k('holidays').where({ country: 'KR', date }).first();
+        if (!ex) await k('holidays').insert({ country: 'KR', date, name });
+      }
+    }
   }
 ];
 
