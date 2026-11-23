@@ -4,6 +4,8 @@ import { ah, HttpError, now, audit, insertId, pick, diff, optDate } from '../uti
 import { requireLogin } from '../auth.js';
 import { need, loadProject } from './projects.js';
 
+import { notify, recipientsOf } from '../notify.js';
+
 export const issuesRouter = Router({ mergeParams: true });
 issuesRouter.use(requireLogin);
 
@@ -41,6 +43,7 @@ issuesRouter.post('/', ah(async (req, res) => {
     if (!i.raised) i.raised = new Date().toISOString().slice(0, 10);
     const id = await insertId(trx, 'issues', { ...i, project_id: pid, updated_at: now(), updated_by: req.user.id });
     await audit(trx, { user: req.user, projectId: pid, entity: 'issue', entityId: id, action: 'create', label: `${i.code} ${i.title}` });
+    await notify(trx, await recipientsOf(trx, i), { kind: 'issue_assigned', projectId: pid, entity: 'issue', entityId: id, actorId: req.user.id, params: { name: i.title, code: i.code, by: req.user.name } });
     return id;
   });
   res.json(await db('issues').where({ id }).first());
@@ -62,6 +65,8 @@ issuesRouter.patch('/:iid', ah(async (req, res) => {
     if (!Object.keys(ch).length) return;
     await trx('issues').where({ id: iid }).update({ ...up, version: before.version + 1, updated_at: now(), updated_by: req.user.id });
     await audit(trx, { user: req.user, projectId: pid, entity: 'issue', entityId: iid, action: 'update', label: `${before.code} ${up.title || before.title}`, changes: ch });
+    const after = { ...before, ...up }, oldR = new Set(await recipientsOf(trx, before));
+    await notify(trx, (await recipientsOf(trx, after)).filter(u => !oldR.has(u)), { kind: 'issue_assigned', projectId: pid, entity: 'issue', entityId: iid, actorId: req.user.id, params: { name: after.title, code: after.code, by: req.user.name } });
   });
   res.json(await db('issues').where({ id: iid }).first());
 }));
@@ -91,5 +96,8 @@ issuesRouter.post('/:iid/comments', ah(async (req, res) => {
   if (!i) throw new HttpError(404, '이슈가 없습니다.');
   const id = await insertId(db, 'issue_comments', { issue_id: iid, user_id: req.user.id, body, created_at: now() });
   await audit(null, { user: req.user, projectId: pid, entity: 'issue', entityId: iid, action: 'comment', label: `${i.code} 댓글: ${body.slice(0, 80)}` });
+  // 이슈 담당자와 앞서 댓글을 단 사람에게
+  const earlier = (await db('issue_comments').where({ issue_id: iid }).distinct('user_id')).map(r => r.user_id);
+  await notify(null, [...await recipientsOf(null, i), ...earlier], { kind: 'issue_comment', projectId: pid, entity: 'issue', entityId: iid, actorId: req.user.id, params: { name: i.title, code: i.code, by: req.user.name, text: body.slice(0, 120) } });
   res.json({ id, issue_id: iid, user_id: req.user.id, user_name: req.user.name, body, created_at: now() });
 }));

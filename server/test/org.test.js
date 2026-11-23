@@ -177,3 +177,27 @@ test('계약 Detail 시트: 한 시트에서 계약이 다른 같은 이름 작�
   assert.equal(p.tasks[1].name_en, '1단계 최종보고 EN (Myrius–BIMLab)');
   assert.ok(p.tasks.every(t => !('contract' in t)));
 });
+
+test('알림: 작업 배정·일정 변경(자동 조정 포함)·이슈 댓글·마감 임박을 담당자에게, 본인 행동은 알리지 않음', async () => {
+  const kim = (await call('GET', '/users')).body.find(u => u.username === 'kim');
+  const p = (await call('POST', '/projects', { name: '알림 시험', calendars: '', day_basis: 'calendar', phases: [] })).body;
+  const today = new Date().toISOString().slice(0, 10);
+  const a = (await call('POST', `/projects/${p.id}/tasks`, { name: '앞 작업', start: today, end: today })).body.task;
+  const b = (await call('POST', `/projects/${p.id}/tasks`, { name: '내 작업', start: today, end: today, assignee_id: kim.id })).body.task;
+  await call('POST', `/projects/${p.id}/deps`, { pred_id: a.id, succ_id: b.id, kind: 'FS' });
+  const iss = (await call('POST', `/projects/${p.id}/issues`, { title: '문제', assignee_id: kim.id })).body;
+  await call('POST', `/projects/${p.id}/issues/${iss.id}/comments`, { body: '확인 부탁' });
+  assert.equal((await call('GET', '/notifications')).body.unread, 0); // 관리자 본인에게는 없음
+  await call('POST', '/auth/login', { username: 'kim', password: 'pass12345' });
+  const n = (await call('GET', '/notifications')).body;
+  const kinds = n.items.map(x => x.kind).sort();
+  assert.deepEqual(kinds, ['issue_assigned', 'issue_comment', 'task_assigned', 'task_changed', 'task_due'].sort());
+  assert.equal(n.items.find(x => x.kind === 'task_changed').params.auto, true);
+  assert.equal(n.unread, 5);
+  await call('GET', '/notifications'); // 다시 불러도 마감 알림은 한 번만
+  await call('POST', '/notifications/read', { all: true });
+  const again = (await call('GET', '/notifications')).body;
+  assert.equal(again.unread, 0);
+  assert.equal(again.items.length, 5);
+  await call('POST', '/auth/login', { username: 'admin', password: 'admin1234' });
+});

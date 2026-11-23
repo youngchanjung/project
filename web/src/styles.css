@@ -123,6 +123,11 @@ td input,td select{width:100%;padding:2px 5px;font-size:16px}
 .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}
 .err{background:var(--late-soft);color:var(--late);padding:8px 12px;border-radius:8px;margin:8px 0}
 .ok{background:var(--done-soft);color:var(--done);padding:8px 12px;border-radius:8px;margin:8px 0}
+.bell{position:relative}
+.bell-n{position:absolute;top:-6px;right:-6px;background:var(--late);color:#fff;border-radius:10px;font-size:12px;padding:0 5px;line-height:17px;min-width:17px;text-align:center}
+.bell-pop{position:absolute;right:0;top:calc(100% + 6px);width:min(420px,92vw);max-height:70vh;overflow:auto;background:var(--panel);border:1px solid var(--line);border-radius:12px;box-shadow:0 8px 28px rgba(0,0,0,.18);padding:10px;z-index:60}
+.bell-head{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px}
+.bell-pop .item.unread{background:var(--accent-soft)}
 .toast{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);background:var(--text);color:var(--bg);padding:10px 18px;border-radius:10px;z-index:80;max-width:90vw}
 .login{max-width:380px;margin:12vh auto;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px}
 .login h1{font-size:24.5px;margin:0 0 16px}

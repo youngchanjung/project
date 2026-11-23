@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
+import Bell from './components/Bell.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
@@ -55,6 +56,7 @@ export default function App() {
         <div className="sp" />
         <LangSelect lang={lang} onChange={changeLang} />
         <ContentTrToggle />
+        <Bell />
         <span className="small">{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
         <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
         <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>

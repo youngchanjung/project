@@ -199,6 +199,24 @@ const migrations = [
     async up(k) {
       await k.schema.alterTable('users', t => { t.string('ics_token', 64); t.unique(['ics_token']); });
     }
+  },
+  {
+    name: '008_notifications',
+    async up(k) {
+      await k.schema.createTable('notifications', t => {
+        t.increments('id');
+        t.integer('user_id').notNullable().references('users.id').onDelete('CASCADE');
+        t.string('kind', 30).notNullable();
+        t.integer('project_id').references('projects.id').onDelete('CASCADE');
+        t.string('entity', 20);
+        t.integer('entity_id');
+        t.text('params');
+        t.string('created_at', 32);
+        t.string('read_at', 32);
+        t.string('dedupe', 120).unique();
+        t.index(['user_id', 'id']);
+      });
+    }
   }
 ];
 

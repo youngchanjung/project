@@ -10,6 +10,7 @@ import { HttpError } from './util.js';
 import { translateMsg, reqLang } from './i18n.js';
 import { translateRouter } from './routes/translate.js';
 import { calendarRouter, icsRouter } from './routes/ics.js';
+import { notificationsRouter } from './routes/notifications.js';
 import { sheetRouter } from './routes/sheet.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
@@ -35,6 +36,7 @@ export function createApp() {
   api.use('/translate', translateRouter);
   api.use('/sheet.xlsx', sheetRouter);
   api.use('/me/calendar', calendarRouter);
+  api.use('/notifications', notificationsRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
   api.use('/projects', projectsRouter);

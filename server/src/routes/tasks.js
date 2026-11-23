@@ -4,6 +4,7 @@ import { ah, HttpError, now, audit, insertId, pick, diff, optDate, projectCalend
 import { requireLogin } from '../auth.js';
 import { recalc, wouldCycle } from '../schedule.js';
 import { need, loadProject } from './projects.js';
+import { notify, recipientsOf } from '../notify.js';
 
 export const tasksRouter = Router({ mergeParams: true });
 tasksRouter.use(requireLogin);
@@ -46,6 +47,8 @@ export async function applyRecalc(trx, projectId, user) {
     const before = byId.get(c.id);
     await trx('tasks').where({ id: c.id }).update({ start: c.start, end: c.end, version: before.version + 1, updated_at: now(), updated_by: user?.id ?? null });
     await audit(trx, { user, projectId, entity: 'task', entityId: c.id, action: 'auto', label: `${before.name} (선행작업에 따라 자동 조정)`, changes: { start: [before.start, c.start], end: [before.end, c.end] } });
+    await notify(trx, await recipientsOf(trx, before), { kind: 'task_changed', projectId, entity: 'task', entityId: c.id, actorId: user?.id,
+      params: { name: before.name, code: before.code, from: `${before.start}~${before.end}`, to: `${c.start}~${c.end}`, by: user?.name, auto: true } });
   }
   return changed;
 }
@@ -66,6 +69,7 @@ tasksRouter.post('/', ah(async (req, res) => {
     if (t.sort === undefined) { const { m } = await trx('tasks').where({ project_id: pid }).max({ m: 'sort' }).first(); t.sort = (m ?? 0) + 1; }
     const id = await insertId(trx, 'tasks', { ...t, project_id: pid, updated_at: now(), updated_by: req.user.id });
     await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: id, action: 'create', label: t.name });
+    await notify(trx, await recipientsOf(trx, t), { kind: 'task_assigned', projectId: pid, entity: 'task', entityId: id, actorId: req.user.id, params: { name: t.name, code: t.code, by: req.user.name } });
     return { id };
   });
   res.json({ task: await db('tasks').where({ id: result.id }).first(), shifted: [] });
@@ -90,6 +94,11 @@ tasksRouter.patch('/:tid', ah(async (req, res) => {
     if (!Object.keys(ch).length) return [];
     await trx('tasks').where({ id: tid }).update({ ...up, version: before.version + 1, updated_at: now(), updated_by: req.user.id });
     await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'update', label: up.name || before.name, changes: ch });
+    const after = { ...before, ...up };
+    const oldR = new Set(await recipientsOf(trx, before)), newR = await recipientsOf(trx, after);
+    const base = { projectId: pid, entity: 'task', entityId: tid, actorId: req.user.id };
+    await notify(trx, newR.filter(u => !oldR.has(u)), { ...base, kind: 'task_assigned', params: { name: after.name, code: after.code, by: req.user.name } });
+    if (ch.start || ch.end) await notify(trx, newR.filter(u => oldR.has(u)), { ...base, kind: 'task_changed', params: { name: after.name, code: after.code, from: `${before.start}~${before.end}`, to: `${after.start}~${after.end}`, by: req.user.name } });
     if (ch.start || ch.end || ch.status || ch.not_before) return applyRecalc(trx, pid, req.user);
     return [];
   });
