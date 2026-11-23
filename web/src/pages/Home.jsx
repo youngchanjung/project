@@ -6,6 +6,7 @@ import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
 import { fmt, fmtY, diff, ddayTxt, ROLE_NAME, downloadXLSX } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
+import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -16,6 +17,7 @@ export default function Home() {
   const [onlyMine, setOnlyMine] = useState(false);
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
+  const [subscribing, setSubscribing] = useState(false);
   const nav = useNavigate();
   const { toast } = useApp();
   const load = () => { api.get('/projects').then(setProjects); api.get('/me/work').then(setWork); };
@@ -39,7 +41,7 @@ export default function Home() {
 
       <div className="grid2" style={{ marginBottom: 20 }}>
         <div className="card">
-          <h3>{tr('내 작업')} <span className="small">{tr('담당자로 지정되었거나 담당 칸에 내 이름이 있는 작업')}</span></h3>
+          <h3>{tr('내 작업')} <span className="small">{tr('담당자로 지정되었거나 담당 칸에 내 이름이 있는 작업')}</span><button className="btn sm" onClick={() => setSubscribing(true)} title={tr('내 작업·이슈를 Outlook 달력에 띄웁니다.')}>📅 {tr('Outlook 달력에 구독')}</button></h3>
           <div className="list">
             {[...myLate, ...mySoon].map(t => (
               <div key={t.id} className="item" onClick={() => nav(`/projects/${t.project_id}/tasks?open=${t.id}`)}>
@@ -96,6 +98,7 @@ export default function Home() {
         })}
         {!list.length && <div className="empty">{tr('프로젝트가 없습니다. 오른쪽 위 ‘새 프로젝트’로 만들어 보세요.')}</div>}
       </div>
+      {subscribing && <CalendarSubscribe onClose={() => setSubscribing(false)} toast={toast} />}
       {creating && <NewProject onClose={() => setCreating(false)} onDone={p => nav(`/projects/${p.id}/settings`)} />}
     </main>
   );
