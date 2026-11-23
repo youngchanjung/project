@@ -4,7 +4,8 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { fmt, fmtY, diff, ddayTxt, ROLE_NAME } from '../util.js';
+import { fmt, fmtY, diff, ddayTxt, ROLE_NAME, downloadXLSX } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -16,6 +17,7 @@ export default function Home() {
   const [q, setQ] = useState('');
   const [creating, setCreating] = useState(false);
   const nav = useNavigate();
+  const { toast } = useApp();
   const load = () => { api.get('/projects').then(setProjects); api.get('/me/work').then(setWork); };
   useEffect(load, []);
 
@@ -68,6 +70,12 @@ export default function Home() {
         <span className={`chip ${onlyMine ? 'on' : ''}`} onClick={() => setOnlyMine(!onlyMine)}>{tr('내 프로젝트만')}</span>
         <span className={`chip ${showArchived ? 'on' : ''}`} onClick={() => setShowArchived(!showArchived)}>{tr('보관된 프로젝트 포함')}</span>
         <div className="sp" />
+        <ExportButton toast={toast} make={() => downloadXLSX('프로젝트 현황', [
+          { name: '프로젝트', rows: list, cols: [['name', '이름'], ['code', '코드'], ['client', '발주처·협력처'], [p => p.pms.join(', '), 'PM'], [p => tr(p.archived ? '보관' : p.status), '상태'], [p => tr(ROLE_NAME[p.myRole] || ''), '내 역할'],
+            [p => p.stats.start || '', '시작'], [p => p.stats.end || '', '종료'], [p => p.stats.tasks, '작업'], [p => p.stats.done, '완료'], [p => p.stats.tasks ? Math.round(p.stats.done / p.stats.tasks * 100) : 0, '완료율(%)'],
+            [p => p.stats.late, '지연'], [p => p.stats.active, '진행 중'], [p => p.stats.openIssues, '미해결 이슈'], [p => p.stats.lateIssues, '지연 이슈'], [p => p.stats.nextKey ? `${p.stats.nextKey.name} (${p.stats.nextKey.date})` : '', '다음 핵심 일정']] },
+          { name: '내 작업', rows: [...myLate, ...mySoon], cols: [['project_name', '프로젝트'], ['name', '작업'], ['start', '시작'], ['end', '종료'], [t => tr(t.state), '상태'], [t => t.is_key ? '★' : '', '핵심']] },
+          { name: '내 이슈', rows: work.issues, cols: [['project_name', '프로젝트'], ['code', 'No'], ['title', '이슈'], [i => tr(i.priority), '중요도'], ['target', '목표일']] }])} />
         <button className="btn primary" onClick={() => setCreating(true)}>{tr('+ 새 프로젝트')}</button>
       </div>
       <div className="grid3">

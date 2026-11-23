@@ -1,5 +1,6 @@
 import { useProject } from '../pages/Project.jsx';
-import { addD, diff, fmt, fmtY, dow, ddayTxt, issueOpen, issueLate } from '../util.js';
+import { addD, diff, fmt, fmtY, dow, ddayTxt, issueOpen, issueLate, downloadXLSX, taskCols, issueCols } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -17,7 +18,7 @@ export function TaskRow({ t, right }) {
 }
 
 export default function Dashboard() {
-  const { filtered: ts, issues, holidays, td, openIssue } = useProject();
+  const { filtered: ts, issues, holidays, td, openIssue, phases, tasks, deps, project, toast } = useProject();
   const wk = addD(td, 7);
   const late = ts.filter(t => t.st === '지연').sort((a, b) => a.end.localeCompare(b.end));
   const prog = ts.filter(t => t.st === '진행중').sort((a, b) => a.end.localeCompare(b.end));
@@ -31,6 +32,16 @@ export default function Dashboard() {
 
   return (
     <>
+      <div className="toolbar" style={{ justifyContent: 'flex-end' }}>
+        <ExportButton toast={toast} make={() => {
+          const tc = taskCols({ phases, tasks, deps }), ic = issueCols({ tasks });
+          return downloadXLSX(`${project.name}_대시보드`, [
+            { name: '기한 초과', cols: [...tc, [t => diff(t.end, td), '지연(일)']], rows: late },
+            { name: '앞으로 7일', cols: tc, rows: week }, { name: '진행 중', cols: tc, rows: prog },
+            { name: '중요 이슈', cols: ic, rows: ihigh }, { name: '핵심 일정', cols: tc, rows: keys },
+            { name: '30일 내 공휴일', cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']], rows: hols }]);
+        }} />
+      </div>
       <div className="kpis">
         <div className="kpi late">{tr('기한 초과 작업')}<b>{late.length}</b></div>
         <div className="kpi prog">{tr('진행 중')}<b>{prog.length}</b></div>

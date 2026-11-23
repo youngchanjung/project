@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
-import { addD, diff, fmt, weekday, isPoint } from '../util.js';
+import { addD, diff, fmt, weekday, isPoint, downloadXLSX, taskCols } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
 const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--plan)', 보류: 'var(--hold)' };
 
 export default function Gantt() {
-  const { filtered: ts, phases, holidays, td, color, openTask } = useProject();
+  const { filtered: ts, phases, holidays, td, color, openTask, tasks, deps, project, toast } = useProject();
   const [zoom, setZoom] = useState(() => localStorage.getItem('gantt-zoom') || 'week');
   const [showBase, setShowBase] = useState(true);
   const wrap = useRef(null);
@@ -66,6 +67,11 @@ export default function Gantt() {
         {[['day', tr('일 단위')], ['week', tr('주 단위')], ['month', tr('월 단위')]].map(([k, n]) => <button key={k} className={`btn sm ${zoom === k ? 'primary' : ''}`} onClick={() => setZ(k)}>{n}</button>)}
         <button className="btn sm" onClick={() => { wrap.current.scrollLeft = Math.max(0, x(td) - 200); }}>{tr('오늘로 이동')}</button>
         <label className="small"><input type="checkbox" checked={showBase} onChange={e => setShowBase(e.target.checked)} /> {tr('기준 일정 표시')}</label>
+        <ExportButton toast={toast} make={() => {
+          const order = new Map(phases.map((p, i) => [p.id, i]));
+          const rows = [...ts].sort((a, b) => ((order.get(a.phase_id) ?? 999) - (order.get(b.phase_id) ?? 999)) || a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
+          return downloadXLSX(`${project.name}_간트`, [{ name: '간트', cols: [...taskCols({ phases, tasks, deps }), [t => diff(t.start, t.end) + 1, '기간(일)']], rows }, { name: '공휴일', cols: [['date', '날짜'], ['name', '이름'], ['country', '국가']], rows: holidays }]);
+        }} />
         <div className="legend">
           <span><i style={{ background: 'var(--plan)' }} />{tr('예정')}</span><span><i style={{ background: 'var(--prog)' }} />{tr('진행중')}</span>
           <span><i style={{ background: 'var(--late)' }} />{tr('지연')}</span><span><i style={{ background: 'var(--done)' }} />{tr('완료')}</span>

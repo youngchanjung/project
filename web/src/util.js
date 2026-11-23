@@ -1,5 +1,5 @@
 // 날짜·상태 도우미 (날짜는 'YYYY-MM-DD' 문자열)
-import { locale, tr } from './i18n.js';
+import { locale, tr, getLang } from './i18n.js';
 const D = s => { const [y, m, d] = s.split('-').map(Number); return new Date(Date.UTC(y, m - 1, d)); };
 export const S = d => d.toISOString().slice(0, 10);
 export const addD = (s, n) => { const d = D(s); d.setUTCDate(d.getUTCDate() + n); return S(d); };
@@ -36,6 +36,40 @@ export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const ISSUE_STATUS = ['접수', '검토중', '조치중', '해결완료', '보류'];
 export const PRIORITY = ['상', '중', '하'];
 export const ROLE_NAME = { pm: 'PM', member: '참여자', viewer: '조회자' };
+
+// 화면의 표를 엑셀로: sheets = [{ name, cols: [[필드 또는 (행)=>값, '머리글'], ...], rows }]
+export async function downloadXLSX(name, sheets) {
+  const body = {
+    name: `${name}_${today()}`,
+    sheets: sheets.map(s => ({
+      name: tr(s.name),
+      header: s.cols.map(c => tr(c[1])),
+      rows: s.rows.map(r => s.cols.map(c => { const v = typeof c[0] === 'function' ? c[0](r) : r[c[0]]; return v ?? ''; }))
+    }))
+  };
+  const res = await fetch('/api/sheet.xlsx', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json', 'X-Lang': getLang() }, body: JSON.stringify(body) });
+  if (!res.ok) { let m; try { m = (await res.json()).error; } catch { /* 무시 */ } throw new Error(m || tr('요청 실패 ({n})', { n: res.status })); }
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(await res.blob());
+  a.download = `${body.name}.xlsx`; document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 10000);
+}
+
+// 작업 표의 공통 열 (화면마다 같은 모양으로 내보내기)
+export function taskCols({ phases, tasks, deps }) {
+  const code = new Map(tasks.map(t => [t.id, t.code || `#${t.id}`]));
+  const phaseName = id => phases.find(p => p.id === id)?.name || '';
+  const predOf = id => deps.filter(d => d.succ_id === id).map(d => `${code.get(d.pred_id)}${d.kind !== 'FS' ? ' ' + d.kind : ''}${d.lag ? (d.lag > 0 ? '+' : '') + d.lag : ''}`).join(', ');
+  return [['code', 'ID'], [t => phaseName(t.phase_id), '단계'], ['name', '작업'], ['name_en', '작업명(영문)'], [t => tr(t.type), '유형'], ['owner', '담당'],
+    ['start', '시작'], ['end', '종료'], [t => (t.st ? tr(t.st) : tr(t.status)), '상태'], ['progress', '진행률'], [t => (t.is_key ? '★' : ''), '핵심'],
+    [t => predOf(t.id), '선행작업'], ['baseline_start', '기준 시작'], ['baseline_end', '기준 종료'],
+    [t => (t.baseline_end && t.end ? diff(t.baseline_end, t.end) : ''), '편차'], ['actual_end', '실제 완료'], ['ref', '계약 조항'], ['note', '비고']];
+}
+export function issueCols({ tasks }) {
+  const code = new Map(tasks.map(t => [t.id, t.code || `#${t.id}`]));
+  return [['code', 'No'], [i => tr(i.priority), '중요도'], ['category', '구분'], ['title', '이슈'], ['detail', '상세'], [i => (i.task_id ? code.get(i.task_id) : ''), '관련 작업 ID'],
+    ['party', '책임기관'], ['owner', '담당자'], ['raised', '발생일'], ['target', '목표일'], ['resolved', '해결일'], [i => tr(i.status), '현황'], ['source', '출처'], ['remark', '비고']];
+}
 
 export function downloadCSV(name, cols, rows) {
   const q = v => `"${String(v ?? '').replace(/"/g, '""')}"`;

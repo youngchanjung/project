@@ -118,3 +118,14 @@ test('공휴일 기본값: 한국 2027(노동절·제헌절 대체), 베트남 2
   for (const d of ['2027-05-03', '2027-07-19', '2027-02-07', '2027-12-27']) assert.ok(await has('KR', d), `KR ${d}`);
   for (const d of ['2026-02-17', '2026-09-01', '2026-11-24', '2027-02-04', '2027-09-03']) assert.ok(await has('VN', d), `VN ${d}`);
 });
+
+test('엑셀 내보내기: 시트·머리글·행을 그대로 담고, 같은 시트 이름은 구분, 빈 요청은 거부', async () => {
+  const r = await call('POST', '/sheet.xlsx', { name: '작업 목록', sheets: [
+    { name: '작업', header: ['ID', '작업', '진행률'], rows: [['A1', '설계', 50], ['A2', '시험', null]] },
+    { name: '작업', header: ['날짜'], rows: [['2027-01-01']] }] });
+  assert.equal(r.status, 200);
+  const wb = XLSX.read(Buffer.from(r.body), { type: 'buffer' });
+  assert.deepEqual(wb.SheetNames, ['작업', '작업 (2)']);
+  assert.deepEqual(XLSX.utils.sheet_to_json(wb.Sheets['작업'], { header: 1 }), [['ID', '작업', '진행률'], ['A1', '설계', 50], ['A2', '시험', '']]);
+  assert.equal((await call('POST', '/sheet.xlsx', { name: 'x', sheets: [] })).status, 400);
+});
