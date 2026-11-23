@@ -13,44 +13,22 @@
 - **화면**: 홈(내 작업·내 이슈·전체 프로젝트 현황), 프로젝트 대시보드, 간트(일/주/월), 달력, 작업 목록, 이슈, 설정
 - **이슈 관리**: 중요도·책임기관·목표일·현황, 관련 작업 연결, 댓글
 - **엑셀**: 기존 CML 계약 일정 통합본(Detail 시트)·일정표·이슈로그 불러오기, 작업·이슈 엑셀 내보내기(수정 후 다시 불러오기 가능)
+- **관리**: 부서(상위·하위), 직원 계정(사번·부서·직급·권한, 엑셀 일괄 등록), 공휴일, DB 백업 현황
 - **변경 이력**: 누가·언제·무엇을 바꿨는지 기록, 작업·이슈별 이력 보기
 - **동시 수정 보호**: 같은 항목을 다른 사람이 먼저 고쳤으면 덮어쓰지 않고 알려 줌
 
 M365(Teams·Outlook) 연동은 개발 막바지에 추가합니다. 그 전까지는 프로그램 자체 계정으로 로그인합니다.
 
-## 서버 PC에 설치하기 (Windows)
+## 설치·실행 (Windows)
 
-1. **Node.js LTS(20 이상)** 설치: <https://nodejs.org> 에서 LTS 버전을 받아 기본 옵션으로 설치
-2. **Git** 설치: <https://git-scm.com/download/win>
-3. 명령 프롬프트에서 원하는 폴더로 이동 후 저장소 받기
-   ```
-   git clone https://github.com/youngchanjung/project.git schedule
-   cd schedule
-   ```
-4. `start-server.bat` 더블클릭 → 처음에는 설치와 화면 빌드를 자동으로 한 뒤 서버가 켜집니다.
-5. 서버 PC에서 <http://localhost:3000> 접속 → **처음 접속 시 관리자 계정**을 만듭니다.
-6. 다른 직원은 `http://서버PC이름:3000` (또는 `http://서버IP:3000`)으로 접속합니다.
-   - 접속이 안 되면 Windows 방화벽에서 3000번 포트(TCP) 인바운드를 허용하세요.
-7. 관리자는 **관리** 메뉴에서 직원 계정을 만들고, 각 프로젝트의 **설정 → 참여자**에서 역할을 지정합니다.
+자세한 순서는 **[docs/설치가이드_Windows.md](docs/설치가이드_Windows.md)** 를 보세요. 요약:
 
-### 서버 PC가 재부팅돼도 자동으로 켜지게 하기 (선택)
-
-[NSSM](https://nssm.cc) 으로 Windows 서비스로 등록하는 방법을 권장합니다.
-```
-nssm install RnDSchedule "C:\Program Files\nodejs\node.exe" "C:\경로\schedule\server\src\index.js"
-nssm set RnDSchedule AppDirectory "C:\경로\schedule\server"
-nssm start RnDSchedule
-```
-
-### 업데이트
-
-GitHub에 새 커밋이 올라오면 서버 PC에서 `update-server.bat` 실행 후 서버(또는 서비스)를 다시 시작합니다.
-DB 구조 변경은 서버가 시작될 때 자동으로 적용됩니다.
-
-### 백업
-
-모든 데이터는 `data/schedule.db` 파일 하나에 들어 있습니다. 이 파일을 정기적으로 다른 곳(NAS, OneDrive 등)에 복사해 두세요.
-(`data/secret.key` 는 로그인 유지용 키입니다. 잃어버리면 모두 다시 로그인하면 됩니다.)
+1. Node.js LTS, Git, PostgreSQL 설치
+2. `git clone https://github.com/youngchanjung/project.git schedule`
+3. `setup-db.bat` → DB·계정 생성, `.env` 작성
+4. `start-server.bat` → <http://localhost:3000> 접속, 첫 관리자 계정 만들기
+5. **관리** 화면에서 부서·직원(엑셀 일괄 등록 가능)·권한·공휴일 입력
+6. `register-backup-task.bat` (관리자 권한) → 매주 금요일 19:00 자동 DB 백업
 
 ## 기존 엑셀 가져오기
 
@@ -68,9 +46,8 @@ ID(이슈 No)가 같은 항목은 갱신하고, 없는 항목은 추가합니다
 
 ## 웹 버전(클라우드)으로 옮기기
 
-- `.env` 에 `DB_CLIENT=pg`, `DATABASE_URL=postgres://...` 를 넣으면 PostgreSQL(예: Supabase)을 사용합니다.
+- 서버 PC 와 같은 PostgreSQL 을 쓰므로 `.env` 의 `DATABASE_URL` 만 클라우드 DB 주소로 바꾸면 됩니다. 데이터는 백업(.dump)을 복원해 옮깁니다.
 - HTTPS 로 서비스할 때는 `SECURE_COOKIE=true`.
-- 데이터 이전은 각 프로젝트를 엑셀로 내보낸 뒤 새 서버에서 불러오는 방식으로 할 수 있습니다. (전용 이전 도구는 추후 추가)
 
 설정 항목은 `.env.example` 참고.
 
@@ -79,7 +56,8 @@ ID(이슈 No)가 같은 항목은 갱신하고, 없는 항목은 추가합니다
 ```
 npm install
 npm run dev        # API(3000) + 화면 개발 서버(5173, /api 는 3000으로 전달)
-npm test           # 일정 계산 테스트
+npm test           # 일정 계산·관리 기능 테스트 (임시 SQLite 사용)
+npm run backup     # 지금 DB 백업
 npm run build      # 화면 빌드 → web/dist (서버가 함께 제공)
 ```
 
@@ -92,7 +70,8 @@ server/src
   schedule.js       근무일·선행관계 일정 계산
   excel.js          엑셀 불러오기/내보내기
   auth.js           로그인·권한 (M365 연동 시 확장)
-  routes/           API
+  backup.js         DB 백업 (pg_dump / SQLite 사본)
+  routes/           API (org.js: 직원·부서, backup.js: 백업 현황)
 web/src
   pages/            홈, 프로젝트, 관리, 로그인
   views/            대시보드, 간트, 달력, 작업 목록, 이슈, 설정

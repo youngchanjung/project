@@ -1,11 +1,12 @@
 import { Router } from 'express';
 import multer from 'multer';
 import { db } from '../db.js';
-import { ah, HttpError, now, audit, insertId, projectCalendar } from '../util.js';
+import { ah, HttpError, now, audit, insertId, projectCalendar, isDate } from '../util.js';
 import { requireLogin, requireAdmin } from '../auth.js';
 import { parseWorkbooks, buildExport } from '../excel.js';
 import { recalc, stateOf } from '../schedule.js';
 import { need, loadProject } from './projects.js';
+import { COUNTRIES, isCountry } from '../countries.js';
 import { applyRecalc } from './tasks.js';
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 30 * 1024 * 1024, files: 10 } });
@@ -131,6 +132,7 @@ exportRouter.get('/', ah(async (req, res) => {
 // ---- 공휴일 ----
 export const holidaysRouter = Router();
 holidaysRouter.use(requireLogin);
+holidaysRouter.get('/countries', (_req, res) => res.json(COUNTRIES));
 holidaysRouter.get('/', ah(async (req, res) => {
   const q = db('holidays').orderBy('date');
   if (req.query.country) q.where({ country: req.query.country });
@@ -138,11 +140,33 @@ holidaysRouter.get('/', ah(async (req, res) => {
 }));
 holidaysRouter.post('/', requireAdmin, ah(async (req, res) => {
   const { country, date, name } = req.body || {};
-  if (!/^[A-Z]{2}$/.test(country || '') || !/^\d{4}-\d{2}-\d{2}$/.test(date || '')) throw new HttpError(400, '국가 코드(KR, VN 등)와 날짜를 입력하세요.');
+  if (!isCountry(country)) throw new HttpError(400, `휴일 달력 국가는 ${COUNTRIES.map(c => c.name).join(', ')} 중에서 고르세요.`);
+  if (!isDate(date)) throw new HttpError(400, '날짜를 입력하세요.');
   if (await db('holidays').where({ country, date }).first()) throw new HttpError(400, '이미 등록된 날짜입니다.');
   const id = await insertId(db, 'holidays', { country, date, name: name || '' });
   await audit(null, { user: req.user, entity: 'holiday', entityId: id, action: 'create', label: `${country} ${date} ${name || ''}` });
   res.json(await db('holidays').where({ id }).first());
+}));
+// 여러 날 한 번에 등록: 한 줄에 "2027-02-05 설날" (엑셀에서 날짜·이름 두 칸을 복사해 붙여 넣어도 됨)
+holidaysRouter.post('/bulk', requireAdmin, ah(async (req, res) => {
+  const { country, text } = req.body || {};
+  if (!isCountry(country)) throw new HttpError(400, '휴일 달력 국가를 고르세요.');
+  const rows = [], bad = [];
+  for (const line of String(text || '').split(/\r?\n/)) {
+    if (!line.trim()) continue;
+    const m = line.trim().match(/^(\d{4})[-./](\d{1,2})[-./](\d{1,2})\.?\s*(?:\([^)]*\))?\s*(.*)$/);
+    const date = m && `${m[1]}-${m[2].padStart(2, '0')}-${m[3].padStart(2, '0')}`;
+    if (!m || !isDate(date)) { bad.push(line.trim()); continue; }
+    rows.push({ country, date, name: m[4].trim().slice(0, 200) });
+  }
+  if (bad.length) throw new HttpError(400, `날짜를 읽지 못한 줄: ${bad.slice(0, 5).join(' / ')}${bad.length > 5 ? ` 외 ${bad.length - 5}줄` : ''}`);
+  const have = new Set((await db('holidays').where({ country }).select('date')).map(r => r.date));
+  const add = [...new Map(rows.filter(r => !have.has(r.date)).map(r => [r.date, r])).values()];
+  if (add.length) await db.transaction(async trx => {
+    await trx('holidays').insert(add);
+    await audit(trx, { user: req.user, entity: 'holiday', action: 'import', label: `${country} 공휴일 ${add.length}일 추가` });
+  });
+  res.json({ added: add.length, skipped: rows.length - add.length });
 }));
 holidaysRouter.delete('/:id', requireAdmin, ah(async (req, res) => {
   const h = await db('holidays').where({ id: Number(req.params.id) }).first();

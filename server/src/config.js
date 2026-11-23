@@ -24,12 +24,16 @@ function secret() {
 
 export const config = {
   port: Number(process.env.PORT || 3000),
-  dbClient: (process.env.DB_CLIENT || 'sqlite').toLowerCase() === 'pg' ? 'pg' : 'sqlite',
+  // 기본 DB 는 PostgreSQL. DB_CLIENT=sqlite 로 두면 설치 없이 파일 하나로 시험해 볼 수 있음
+  dbClient: (process.env.DB_CLIENT || (process.env.DATABASE_URL ? 'pg' : 'sqlite')).toLowerCase() === 'pg' ? 'pg' : 'sqlite',
   databaseUrl: process.env.DATABASE_URL,
   sqliteFile: path.resolve(ROOT, process.env.SQLITE_FILE || path.join(dataDir, 'schedule.db')),
   dataDir,
   sessionSecret: secret(),
   sessionDays: Number(process.env.SESSION_DAYS || 14),
   secureCookie: process.env.SECURE_COOKIE === 'true',
-  webDist: path.join(ROOT, 'web', 'dist')
+  webDist: path.join(ROOT, 'web', 'dist'),
+  backupDir: path.resolve(ROOT, process.env.BACKUP_DIR || path.join(dataDir, 'backups')),
+  backupCopyDir: process.env.BACKUP_COPY_DIR ? path.resolve(ROOT, process.env.BACKUP_COPY_DIR) : null,
+  backupKeep: Math.max(1, Number(process.env.BACKUP_KEEP || 12))
 };

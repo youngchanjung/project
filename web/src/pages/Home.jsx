@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
+import { COUNTRIES } from '../countries.js';
 import { fmt, fmtY, diff, ddayTxt, ROLE_NAME } from '../util.js';
 
 export default function Home() {
@@ -112,10 +113,10 @@ function NewProject({ onClose, onDone }) {
         <label>설명</label><textarea value={f.description} onChange={set('description')} />
         <label>단계 (쉼표 구분)</label><input type="text" value={f.phases} onChange={set('phases')} />
         <label>휴일 달력</label>
-        <div className="row">{['KR', 'VN'].map(c => (
+        <div className="row">{COUNTRIES.map(({ code: c, name }) => (
           <label key={c} className="small"><input type="checkbox" checked={f.calendars.split(',').includes(c)} onChange={e => {
             const cs = new Set(f.calendars.split(',').filter(Boolean)); e.target.checked ? cs.add(c) : cs.delete(c); setF({ ...f, calendars: [...cs].join(',') });
-          }} /> {c === 'KR' ? '한국' : '베트남'}</label>))}</div>
+          }} /> {name}</label>))}</div>
         <label>일정 계산 기준</label>
         <select value={f.day_basis} onChange={set('day_basis')}><option value="workday">근무일 (주말·공휴일 제외)</option><option value="calendar">달력일 (모든 날 포함)</option></select>
       </div>

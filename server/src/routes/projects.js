@@ -2,6 +2,7 @@ import { Router } from 'express';
 import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet } from '../util.js';
 import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
+import { normCalendars } from '../countries.js';
 import { stateOf } from '../schedule.js';
 
 export const projectsRouter = Router();
@@ -53,6 +54,7 @@ projectsRouter.get('/', ah(async (req, res) => {
 
 projectsRouter.post('/', ah(async (req, res) => {
   const body = pick(req.body || {}, PCOLS);
+  body.calendars = normCalendars(body.calendars);
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
@@ -89,6 +91,7 @@ projectsRouter.patch('/:id', ah(async (req, res) => {
   await need(req, id, 'pm');
   const before = await loadProject(id);
   const up = pick(req.body || {}, [...PCOLS, 'archived']);
+  if (up.calendars !== undefined) up.calendars = normCalendars(up.calendars);
   if (up.name !== undefined && !String(up.name).trim()) throw new HttpError(400, '프로젝트 이름은 비울 수 없습니다.');
   if (up.archived !== undefined) up.archived = !!up.archived;
   await db('projects').where({ id }).update({ ...up, updated_at: now() });

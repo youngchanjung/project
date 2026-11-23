@@ -126,6 +126,31 @@ const migrations = [
         t.index(['project_id', 'at']);
       });
     }
+  },
+  {
+    // 조직(부서)·직원 정보, M365 SSO 연결용 칸
+    name: '002_org',
+    async up(k) {
+      await k.schema.createTable('departments', t => {
+        t.increments('id');
+        t.string('name', 100).notNullable();
+        t.integer('parent_id').references('departments.id').onDelete('SET NULL'); // 상위 부서 (선택)
+        t.string('code', 40);
+        t.integer('sort').notNullable().defaultTo(0);
+        t.boolean('active').notNullable().defaultTo(true);
+        t.string('created_at', 32);
+      });
+      await k.schema.alterTable('users', t => {
+        t.integer('department_id').references('departments.id').onDelete('SET NULL');
+        t.string('employee_no', 40); // 사번
+        t.string('position', 40); // 직급/직책
+        t.string('phone', 40);
+        // 로그인 방식: local(자체 계정) | m365 (Entra ID). SSO 전환 시 external_id 에 Entra 객체 ID 저장
+        t.string('auth_provider', 16).notNullable().defaultTo('local');
+        t.string('external_id', 100);
+        t.string('last_login_at', 32);
+      });
+    }
   }
 ];
 

@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
 import { useApp } from '../App.jsx';
 import History from '../components/History.jsx';
+import { COUNTRIES } from '../countries.js';
 import { ROLE_NAME, PALETTE } from '../util.js';
 
 export default function Settings() {
@@ -47,10 +48,10 @@ function Info() {
         <label>설명</label><textarea value={f.description || ''} onChange={set('description')} />
         <label>상태</label><select value={f.status} onChange={set('status')}>{['계획', '진행중', '보류', '완료'].map(x => <option key={x}>{x}</option>)}</select>
         <label>휴일 달력</label>
-        <div className="row">{['KR', 'VN'].map(c => (
+        <div className="row">{COUNTRIES.map(({ code: c, name }) => (
           <label key={c} className="small"><input type="checkbox" checked={String(f.calendars).split(',').includes(c)} onChange={e => {
             const cs = new Set(String(f.calendars).split(',').filter(Boolean)); e.target.checked ? cs.add(c) : cs.delete(c); setF({ ...f, calendars: [...cs].join(',') || 'KR' });
-          }} /> {c === 'KR' ? '한국' : '베트남'}</label>))}</div>
+          }} /> {name}</label>))}</div>
         <label>일정 계산 기준</label>
         <select value={f.day_basis} onChange={set('day_basis')}><option value="workday">근무일 (주말·공휴일 제외)</option><option value="calendar">달력일 (모든 날 포함)</option></select>
       </div></fieldset>

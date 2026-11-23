@@ -4,7 +4,9 @@ import { db } from './db.js';
 import { config } from './config.js';
 
 // 지금은 프로그램 자체 계정(아이디/비밀번호)으로 로그인합니다.
-// M365(Entra ID) 연동 시 이 파일에 OIDC 로그인 경로를 추가하고 users.email 로 계정을 연결합니다.
+// M365(Entra ID) 연동 시: routes/auth.js 에 OIDC 로그인 경로를 추가하고, 로그인한 회사 계정을
+// users.email(또는 users.external_id)로 기존 계정에 연결한 뒤 setSession() 을 그대로 호출합니다.
+// 세션·권한 확인(loadUser, requireLogin, requireAdmin, projectRole)은 로그인 방식과 무관하게 그대로 씁니다.
 
 const COOKIE = 'sid';
 
@@ -20,7 +22,11 @@ export function setSession(res, user) {
 }
 export const clearSession = res => res.clearCookie(COOKIE);
 
-export const publicUser = u => u && ({ id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, active: !!u.active });
+export const publicUser = u => u && ({
+  id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, active: !!u.active,
+  department_id: u.department_id ?? null, employee_no: u.employee_no ?? null, position: u.position ?? null,
+  phone: u.phone ?? null, auth_provider: u.auth_provider || 'local', last_login_at: u.last_login_at ?? null
+});
 
 export async function loadUser(req, _res, next) {
   const tok = req.cookies?.[COOKIE];
