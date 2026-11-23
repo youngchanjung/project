@@ -99,6 +99,14 @@ td input,td select{width:100%;padding:2px 5px;font-size:16px}
 .gbase{position:absolute;top:26px;height:3px;border-radius:2px;background:var(--muted);opacity:.45}
 .glbl{position:absolute;font-size:13.5px;white-space:nowrap;color:var(--muted);top:7px}
 .gms{position:absolute;top:9px;width:14px;height:14px;transform:rotate(45deg);cursor:pointer}
+.gbar.drag,.gms.drag{cursor:grab;touch-action:none}
+.gbar.dragging,.gms.dragging{cursor:grabbing;outline:2px solid var(--text);z-index:4}
+.gh{position:absolute;top:-2px;bottom:-2px;width:7px;cursor:ew-resize}
+.gh.l{left:-3px}.gh.r{right:-3px}
+.garrows{position:absolute;top:0;pointer-events:none;overflow:visible;z-index:1}
+.garrows path{fill:none;stroke:var(--muted);stroke-width:1.3;opacity:.75}
+.garrows path.bad{stroke:var(--late);opacity:.9}
+.garrows path title{pointer-events:auto}
 .todayline{position:absolute;top:0;bottom:0;width:2px;background:var(--late);z-index:2;opacity:.8}
 .legend{display:flex;gap:12px;flex-wrap:wrap;font-size:14.5px;color:var(--muted)}
 .legend i{display:inline-block;width:12px;height:10px;border-radius:3px;margin-right:4px;vertical-align:-1px}
