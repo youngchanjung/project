@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
 import { TaskRow } from './Dashboard.jsx';
-import { addD, fmtY, dow, weekday, monthAdd } from '../util.js';
+import { addD, fmtY, dow, weekday, monthAdd, downloadXLSX, taskCols } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr, locale } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
 export default function Calendar() {
-  const { filtered: ts, holidays, td, color, openTask, can } = useProject();
+  const { filtered: ts, holidays, td, color, openTask, can, phases, tasks, deps, project, toast } = useProject();
   const [m, setM] = useState(td.slice(0, 7));
   const [sel, setSel] = useState(td);
   const hm = new Map(holidays.map(h => [h.date, h.name.split('/').pop().trim()]));
@@ -44,6 +45,12 @@ export default function Calendar() {
         <b style={{ fontSize: 21, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
         <button className="btn" onClick={() => setM(monthAdd(m, 1))}>▶</button>
         <button className="btn" onClick={() => { setM(td.slice(0, 7)); setSel(td); }}>{tr('오늘')}</button>
+        <ExportButton toast={toast} make={() => {
+          const first = m + '-01', last = addD(monthAdd(m, 1) + '-01', -1);
+          const rows = ts.filter(t => t.start <= last && t.end >= first).sort((a, b) => a.start.localeCompare(b.start));
+          return downloadXLSX(`${project.name}_달력_${m}`, [{ name: `${m} 작업`, cols: taskCols({ phases, tasks, deps }), rows },
+            { name: `${m} 공휴일`, cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']], rows: holidays.filter(h => h.date >= first && h.date <= last) }]);
+        }} />
         <span className="small">{tr('▶ 시작 · ■ 마감 · ★ 핵심 · 날짜를 누르면 그날 진행 중인 작업을 오른쪽에 보여줍니다')}{can() ? ` · ${tr('두 번 누르면 그 날짜로 작업 추가')}` : ''}</span>
       </div>
       <div className="calwrap">

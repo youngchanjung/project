@@ -1,7 +1,8 @@
 import { useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
 import { api } from '../api.js';
-import { diff, ddayTxt, fmtY, TASK_STATUS, downloadCSV } from '../util.js';
+import { diff, ddayTxt, fmtY, TASK_STATUS, downloadXLSX, taskCols } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -29,8 +30,8 @@ export default function TaskList() {
         {['', '지연', '진행중', '예정', '완료', '보류'].map(s => <span key={s} className={`chip ${st === s ? 'on' : ''}`} onClick={() => setSt(s)}>{s ? tr(s) : tr('전체')}</span>)}
         <span className="small">{ts.length}{tr('건')}</span>
         <div className="sp" />
-        <button className="btn sm" onClick={() => downloadCSV(`${project.name}_작업`, [['code', 'ID'], [t => phaseName(t.phase_id), '단계'], ['name', '작업'], ['type', '유형'], ['owner', '담당'], ['start', '시작'], ['end', '종료'], ['status', '상태'], [t => predOf(t.id), '선행'], ['note', '비고']], ts)}>CSV</button>
-        <a className="btn sm" href={`/api/projects/${project.id}/export.xlsx`}>{tr('엑셀로 내보내기')}</a>
+        <ExportButton toast={toast} make={() => downloadXLSX(`${project.name}_작업 목록`, [{ name: '작업 목록', cols: taskCols({ phases, tasks, deps }), rows: ts }])} />
+        <a className="btn sm" href={`/api/projects/${project.id}/export.xlsx`} title={tr('작업·이슈 전체를 다시 불러올 수 있는 형식으로 받습니다.')}>{tr('전체 내보내기 (다시 불러오기용)')}</a>
       </div>
       <div className="tablewrap"><table>
         <thead><tr>{cols.map(([c, n]) => <th key={c} onClick={() => c !== 'pred' && setSort([c, sort[0] === c ? -sort[1] : 1])}>{tr(n)}{k === c ? (dir > 0 ? ' ▲' : ' ▼') : ''}</th>)}</tr></thead>

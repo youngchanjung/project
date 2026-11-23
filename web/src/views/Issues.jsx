@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
-import { fmt, diff, ddayTxt, issueOpen, issueLate, downloadCSV } from '../util.js';
+import { fmt, diff, ddayTxt, issueOpen, issueLate, downloadXLSX, issueCols } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
 export default function Issues() {
-  const { issues, tasks, td, openIssue, project } = useProject();
+  const { issues, tasks, td, openIssue, project, toast } = useProject();
   const [st, setSt] = useState('미해결');
   const [pr, setPr] = useState('');
   const [pa, setPa] = useState('');
@@ -33,7 +34,7 @@ export default function Issues() {
         <select value={pa} onChange={e => setPa(e.target.value)}><option value="">{tr('책임기관 전체')}</option>{uniq(i => i.party).map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
         <input type="search" placeholder={tr('이슈 검색')} value={q} onChange={e => setQ(e.target.value)} />
         <span className="small">{is.length}{tr('건')}</span><div className="sp" />
-        <button className="btn sm" onClick={() => downloadCSV(`${project.name}_이슈`, [['code', 'No'], ['priority', '중요도'], ['category', '구분'], ['title', '이슈'], ['detail', '상세'], ['party', '책임기관'], ['owner', '담당'], ['raised', '발생일'], ['target', '목표일'], ['resolved', '해결일'], ['status', '현황'], ['remark', '비고']], is)}>CSV</button>
+        <ExportButton toast={toast} make={() => downloadXLSX(`${project.name}_이슈`, [{ name: '이슈', cols: [...issueCols({ tasks }), [i => (issueLate(i, td) ? tr('지연') : ''), '지연 여부']], rows: is }])} />
       </div>
       <div className="tablewrap"><table>
         <thead><tr><th>No</th><th>{tr('중요도')}</th><th>{tr('구분')}</th><th>{tr('이슈')}</th><th>{tr('관련 작업')}</th><th>{tr('책임기관')}</th><th>{tr('담당')}</th><th>{tr('발생일')}</th><th>{tr('목표일')}</th><th>{tr('경과')}</th><th>{tr('현황')}</th></tr></thead>

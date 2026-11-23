@@ -2,7 +2,8 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
-import { fmtY, dow } from '../util.js';
+import { fmtY, dow, downloadXLSX } from '../util.js';
+import ExportButton from '../components/ExportButton.jsx';
 import { COUNTRIES } from '../countries.js';
 import { tr } from '../i18n.js';
 
@@ -47,6 +48,7 @@ function Users({ depts, onDeptsChanged }) {
   return (
     <div className="card"><h3>{tr('직원 계정')} <span className="small">{users.filter(u => u.active).length}{tr('명 사용 중')}</span>
       <span className="row" style={{ display: 'flex', gap: 6 }}>
+        <ExportButton toast={toast} make={() => downloadXLSX('직원 계정', [{ name: '직원 계정', rows: shown, cols: [['name', '이름'], ['username', '아이디'], ['employee_no', '사번'], [u => dn.get(u.department_id) || '', '부서'], ['position', '직급'], ['email', '메일'], [u => tr(u.role === 'admin' ? '관리자' : '일반'), '권한'], [u => tr(u.active ? '사용 중' : '사용 중지'), '상태'], [u => u.last_login_at ? fmtDT(u.last_login_at) : '', '최근 로그인']] }])} />
         <button className="btn sm" onClick={() => setImporting(true)}>{tr('엑셀로 일괄 등록')}</button>
         <button className="btn primary sm" onClick={() => setEdit({})}>{tr('+ 계정 추가')}</button>
       </span></h3>
@@ -174,7 +176,7 @@ function Departments({ depts, reload }) {
   const dn = deptPath(depts);
   const sorted = [...depts].sort((a, b) => dn.get(a.id).localeCompare(dn.get(b.id), 'ko'));
   return (
-    <div className="card"><h3>{tr('부서')} <span className="small">{depts.filter(d => d.active).length}{tr('개')}</span><button className="btn primary sm" onClick={() => setEdit({})}>{tr('+ 부서 추가')}</button></h3>
+    <div className="card"><h3>{tr('부서')} <span className="small">{depts.filter(d => d.active).length}{tr('개')}</span><span className="row" style={{ display: 'flex', gap: 6 }}><ExportButton toast={toast} make={() => downloadXLSX('부서', [{ name: '부서', rows: sorted, cols: [[d => dn.get(d.id), '부서'], ['code', '코드'], ['members', '인원'], [d => tr(d.active ? '사용 중' : '사용 안 함'), '상태']] }])} /><button className="btn primary sm" onClick={() => setEdit({})}>{tr('+ 부서 추가')}</button></span></h3>
       <div className="tablewrap" style={{ maxHeight: 420 }}>
         <table><thead><tr><th>{tr('부서')}</th><th>{tr('코드')}</th><th>{tr('인원')}</th><th /></tr></thead>
           <tbody>{sorted.map(d => (
@@ -278,6 +280,7 @@ function Holidays() {
       <div className="toolbar">{COUNTRIES.map(({ code: c, name }) => <span key={c} className={`chip ${country === c ? 'on' : ''}`} onClick={() => setCountry(c)}>{tr(name)}</span>)}
         <span className="sp" />
         <select value={year} onChange={e => setYear(e.target.value)}><option value="">{tr('전체 연도')}</option>{years.map(y => <option key={y} value={y}>{tr('{y}년', { y })}</option>)}</select>
+        <ExportButton toast={toast} make={() => downloadXLSX(`공휴일_${country}${year ? '_' + year : ''}`, [{ name: `${country} ${year || ''}`.trim(), rows: shown, cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']] }])} />
       </div>
       {err && <div className="err">{err}</div>}
       <div className="toolbar"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /><input type="text" placeholder={tr('이름')} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><button className="btn primary" onClick={add}>{tr('추가')}</button>

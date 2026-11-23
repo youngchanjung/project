@@ -9,6 +9,7 @@ import { loadUser } from './auth.js';
 import { HttpError } from './util.js';
 import { translateMsg, reqLang } from './i18n.js';
 import { translateRouter } from './routes/translate.js';
+import { sheetRouter } from './routes/sheet.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
 import { backupRouter } from './routes/backup.js';
@@ -20,7 +21,7 @@ import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/d
 export function createApp() {
   const app = express();
   app.disable('x-powered-by');
-  app.use(express.json({ limit: '2mb' }));
+  app.use(express.json({ limit: '10mb' }));
   app.use(cookieParser());
   app.use(loadUser);
 
@@ -31,6 +32,7 @@ export function createApp() {
   api.use('/departments', departmentsRouter);
   api.use('/backup', backupRouter);
   api.use('/translate', translateRouter);
+  api.use('/sheet.xlsx', sheetRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
   api.use('/projects', projectsRouter);
