@@ -52,6 +52,7 @@ export function parseWorkbooks(buffers) {
       const h = rows.findIndex(r => r && /^ID/.test(s(r[0])) && /Contract/.test(s(r[1])));
       if (h < 0) continue;
       out.sheets.push(sn);
+      const sheetTasks = [];
       const code = sn.slice(0, 2);
       const ph = phase(`${code} ${PHASE_NAMES[code] || sn.replace(/ Detail$/, '').slice(3)}`);
       for (let i = h + 1; i < rows.length; i++) {
@@ -66,7 +67,7 @@ export function parseWorkbooks(buffers) {
           owner: s(r[4]) || null, ref: s(r[5]) && s(r[5]) !== '—' ? s(r[5]) : null, type: mapType(r[6]),
           start, end, baseline_end: iso(r[20]), actual_end: iso(r[24]),
           status: iso(r[24]) || /done/i.test(s(r[18])) ? '완료' : mapTaskStatus(r[17]),
-          is_key: s(r[27]) === 'Y', note: note || null, not_before: iso(r[30])
+          is_key: s(r[27]) === 'Y', note: note || null, not_before: iso(r[30]), contract: s(r[1]) || null
         };
         const manualStart = iso(r[13]);
         const rel = [];
@@ -77,8 +78,16 @@ export function parseWorkbooks(buffers) {
           // 엑셀에서 시작일을 직접 입력한 작업은 입력값이 우선이므로 선행관계는 비고에만 남김
           t.note = [t.note, `엑셀 선행관계(시작일 직접 입력으로 미적용): ${rel.map(d => `${d.pred} ${d.kind}${d.lag ? (d.lag > 0 ? '+' : '') + d.lag : ''}`).join(', ')}`].filter(Boolean).join(' / ');
         } else out.deps.push(...rel);
-        out.tasks.push(t);
+        out.tasks.push(t); sheetTasks.push(t);
       }
+      // 한 시트에 계약이 여럿이면 같은 이름의 작업이 생김 (예: BIM 의 Integra–BIMLab / Myrius–BIMLab) → 이름 뒤에 계약을 붙여 구분
+      const byName = new Map();
+      for (const t of sheetTasks) byName.set(t.name, [...(byName.get(t.name) || []), t]);
+      for (const same of byName.values()) {
+        if (same.length < 2 || new Set(same.map(t => t.contract)).size < 2) continue;
+        for (const t of same) if (t.contract) { t.name = `${t.name} (${t.contract})`; if (t.name_en) t.name_en = `${t.name_en} (${t.contract})`; }
+      }
+      for (const t of sheetTasks) delete t.contract;
     }
     // 공휴일
     if (wb.SheetNames.includes('Holidays')) {

@@ -165,3 +165,15 @@ test('엑셀 불러오기: 빈 프로젝트에 처음 불러오면 작업 없는
   const data = (await call('GET', `/projects/${p.id}/data`)).body;
   assert.deepEqual(data.phases.map(x => x.name), ['현장 골조']);
 });
+
+test('계약 Detail 시트: 한 시트에서 계약이 다른 같은 이름 작업은 계약을 붙여 구분', async () => {
+  const { parseWorkbooks } = await import('../src/excel.js');
+  const row = (id, contract, name, start) => { const r = Array(31).fill(null); Object.assign(r, { 0: id, 1: contract, 2: name + ' EN', 3: name, 6: 'Submission', 15: start, 16: start }); return r; };
+  const head = Array(31).fill(null); head[0] = 'ID'; head[1] = 'Contract';
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([head, row('03-B09', 'Integra–BIMLab', '1단계 최종보고', '2027-05-31'), row('03-M08', 'Myrius–BIMLab', '1단계 최종보고', '2027-05-31'), row('03-B10', 'Integra–BIMLab', '혼자인 작업', '2027-06-01')]), '03_BIM Detail');
+  const p = parseWorkbooks([XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })]);
+  assert.deepEqual(p.tasks.map(t => t.name), ['1단계 최종보고 (Integra–BIMLab)', '1단계 최종보고 (Myrius–BIMLab)', '혼자인 작업']);
+  assert.equal(p.tasks[1].name_en, '1단계 최종보고 EN (Myrius–BIMLab)');
+  assert.ok(p.tasks.every(t => !('contract' in t)));
+});
