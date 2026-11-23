@@ -43,6 +43,8 @@ if exist .env (
     echo DATABASE_URL=postgres://schedule:%DBPASS%@localhost:5432/schedule
     echo SESSION_DAYS=14
     echo BACKUP_KEEP=12
+    echo # DeepL 번역: 앞의 # 을 지우고 키를 넣으세요
+    echo # DEEPL_API_KEY=
   ) > .env
   echo .env 파일을 만들었습니다.
 )
