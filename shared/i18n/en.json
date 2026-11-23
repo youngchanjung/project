@@ -464,6 +464,7 @@
  "출처": "Source",
  "취소": "Cancel",
  "코드": "Code",
+ "파일에 없는 빈 기본 단계 {n}개는 지웁니다.": "{n} empty default phases not in the file will be removed.",
  "파일을 골라": "Choose a file, click",
  "편차": "Variance",
  "표시할 작업이 없습니다.": "No tasks to display.",

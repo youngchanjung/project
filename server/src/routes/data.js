@@ -93,6 +93,16 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
       if (ex) { await trx('issues').where({ id: ex.id }).update({ ...row, version: ex.version + 1, updated_at: now(), updated_by: req.user.id }); sum.issuesUpdated++; }
       else { await insertId(trx, 'issues', { ...row, project_id: pid, updated_at: now(), updated_by: req.user.id }); sum.issuesAdded++; }
     }
+    // 빈 프로젝트에 처음 불러올 때: 새 프로젝트에 미리 만든 기본 단계 중 작업이 하나도 없는 것은 지움
+    sum.phasesRemoved = 0;
+    if (!hasTasks && parsed.phases.length) {
+      const keep = new Set(parsed.phases);
+      for (const ph of await trx('phases').where({ project_id: pid })) {
+        if (keep.has(ph.name)) continue;
+        const used = await trx('tasks').where({ phase_id: ph.id }).first();
+        if (!used) { await trx('phases').where({ id: ph.id }).del(); sum.phasesRemoved++; }
+      }
+    }
     // 기준 일정이 비어 있으면 현재 일정으로 채움
     await trx('tasks').where({ project_id: pid }).whereNull('baseline_end').update({ baseline_start: trx.ref('start'), baseline_end: trx.ref('end') });
     await trx('tasks').where({ project_id: pid }).whereNull('baseline_start').update({ baseline_start: trx.ref('start') });

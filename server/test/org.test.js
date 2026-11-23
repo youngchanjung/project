@@ -152,3 +152,16 @@ test('달력 구독(ICS): 개인 주소로 내 작업·프로젝트 일정을 �
   assert.equal((await get(info.mine)).status, 404);
   assert.equal((await get(again.mine)).status, 200);
 });
+
+test('엑셀 불러오기: 빈 프로젝트에 처음 불러오면 작업 없는 기본 단계는 지움', async () => {
+  const p = (await call('POST', '/projects', { name: '불러오기 시험', calendars: 'KR', day_basis: 'workday', phases: ['기획', '설계'] })).body;
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([['No', '공정', '작업', '시작', '종료', '상태'], [1, '골조', '기초 공사', '2027-03-02', '2027-03-10', '예정']]), '일정표_Schedule');
+  const fd = () => { const f = new FormData(); f.append('files', new Blob([XLSX.write(wb, { type: 'buffer', bookType: 'xlsx' })]), 's.xlsx'); return f; };
+  const dry = fd(); dry.append('dryRun', '1');
+  assert.equal((await call('POST', `/projects/${p.id}/import`, dry)).body.phasesRemoved, 2);
+  const r = (await call('POST', `/projects/${p.id}/import`, fd())).body;
+  assert.equal(r.tasksAdded, 1);
+  const data = (await call('GET', `/projects/${p.id}/data`)).body;
+  assert.deepEqual(data.phases.map(x => x.name), ['현장 골조']);
+});

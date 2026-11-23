@@ -464,6 +464,7 @@
  "출처": "Nguồn",
  "취소": "Hủy",
  "코드": "Mã",
+ "파일에 없는 빈 기본 단계 {n}개는 지웁니다.": "{n} giai đoạn mặc định trống không có trong tệp sẽ bị xóa.",
  "파일을 골라": "Chọn tệp, nhấn",
  "편차": "Chênh lệch",
  "표시할 작업이 없습니다.": "Không có công việc nào để hiển thị.",

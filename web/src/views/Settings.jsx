@@ -155,6 +155,7 @@ function ImportExport() {
         {preview && <div className="ok">
           <div>{tr('인식한 시트:')} {preview.sheets.join(', ')}</div>
           <div>{tr('단계 +')}{preview.phases} {tr('· 작업 +')}{preview.tasksAdded} {tr('/ 갱신')} {preview.tasksUpdated} {tr('· 선행관계')} {preview.deps}{tr('건 · 이슈 +')}{preview.issuesAdded} {tr('/ 갱신')} {preview.issuesUpdated} {tr('· 공휴일 +')}{preview.holidays}</div>
+          {preview.phasesRemoved > 0 && <div className="small">{tr('파일에 없는 빈 기본 단계 {n}개는 지웁니다.', { n: preview.phasesRemoved })}</div>}
           {preview.dayBasis === 'calendar' && <div>{tr('계약 일정 엑셀이 달력일 기준이라 이 프로젝트의 계산 기준을 ‘달력일’로 맞춥니다.')}</div>}
           {preview.depsSkipped.length > 0 && <div>{tr('대상 작업이 없어 건너뛸 선행관계:')} {preview.depsSkipped.slice(0, 8).join(', ')}{preview.depsSkipped.length > 8 ? ' ' + tr('외 {n}건', { n: preview.depsSkipped.length - 8 }) : ''}</div>}
           <div>{preview.shifted ? tr('엑셀 날짜가 선행관계 규칙과 다른 작업 {n}건이 있습니다.', { n: preview.shifted }) : tr('엑셀 날짜가 선행관계 규칙과 모두 일치합니다.')}</div>
