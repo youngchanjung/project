@@ -96,5 +96,6 @@ DB 구조 변경은 서버가 시작될 때 자동으로 적용됩니다. (업�
 | `.env 파일이 없습니다` | `setup-db.bat` 먼저 실행 |
 | `password authentication failed` | `.env` 의 `DATABASE_URL` 비밀번호 확인 |
 | `ECONNREFUSED ...5432` | PostgreSQL 서비스가 켜져 있는지 (서비스 앱 → postgresql-x64-17) |
+| setup-db.bat 에서 "postgres 비밀번호로 접속하지 못했습니다" | PostgreSQL 이 여러 버전 설치된 PC 는 버전마다 포트·비밀번호가 다릅니다. 서비스 앱에서 실행 중인 버전을 보고, 그 버전의 포트(data\postgresql.conf 의 port)와 그 버전을 설치할 때 정한 비밀번호를 넣으세요. |
 | 백업 실패: pg_dump 를 찾을 수 없음 | `.env` 에 `PG_BIN=C:\Program Files\PostgreSQL\17\bin` 추가 |
 | 설치 없이 잠깐 시험만 | `.env` 에 `DB_CLIENT=sqlite` 한 줄만 두면 `data\schedule.db` 파일로 동작 |

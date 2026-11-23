@@ -17,7 +17,20 @@ if "%PSQL%"=="" (
 )
 echo 사용할 psql: %PSQL%
 echo.
-set /p PGPASSWORD=PostgreSQL 설치 때 정한 postgres 관리자 비밀번호: 
+echo PostgreSQL 이 여러 버전 설치되어 있으면 버전마다 포트와 비밀번호가 다릅니다.
+echo (보통 가장 최근에 설치한 버전이 5432, 그다음 5433, 5434 ...)
+set PGPORT=
+set /p PGPORT=사용할 PostgreSQL 포트 [Enter = 5432]: 
+if "%PGPORT%"=="" set PGPORT=5432
+set /p PGPASSWORD=그 버전을 설치할 때 정한 postgres 관리자 비밀번호: 
+"%PSQL%" -U postgres -h localhost -c "select 1" >nul 2>&1 || (
+  echo.
+  echo 포트 %PGPORT% 의 PostgreSQL 에 postgres 비밀번호로 접속하지 못했습니다.
+  echo 비밀번호가 맞는지, 다른 버전의 포트가 아닌지 확인한 뒤 다시 실행하세요.
+  pause
+  exit /b 1
+)
+echo 접속 확인.
 echo.
 echo 일정관리 프로그램이 DB 에 접속할 때 쓸 새 비밀번호를 정하세요.
 echo (영문·숫자만 사용, @ : / # 같은 기호는 쓰지 마세요)
@@ -35,12 +48,12 @@ if exist .env (
   echo.
   echo .env 파일이 이미 있어 그대로 둡니다. 아래 줄을 .env 에 직접 넣으세요:
   echo   DB_CLIENT=pg
-  echo   DATABASE_URL=postgres://schedule:%DBPASS%@localhost:5432/schedule
+  echo   DATABASE_URL=postgres://schedule:%DBPASS%@localhost:%PGPORT%/schedule
 ) else (
   (
     echo PORT=3000
     echo DB_CLIENT=pg
-    echo DATABASE_URL=postgres://schedule:%DBPASS%@localhost:5432/schedule
+    echo DATABASE_URL=postgres://schedule:%DBPASS%@localhost:%PGPORT%/schedule
     echo SESSION_DAYS=14
     echo BACKUP_KEEP=12
     echo # DeepL 번역: 앞의 # 을 지우고 키를 넣으세요
