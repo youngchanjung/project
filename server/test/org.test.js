@@ -129,3 +129,26 @@ test('엑셀 내보내기: 시트·머리글·행을 그대로 담고, 같은 �
   assert.deepEqual(XLSX.utils.sheet_to_json(wb.Sheets['작업'], { header: 1 }), [['ID', '작업', '진행률'], ['A1', '설계', 50], ['A2', '시험', '']]);
   assert.equal((await call('POST', '/sheet.xlsx', { name: 'x', sheets: [] })).status, 400);
 });
+
+test('달력 구독(ICS): 개인 주소로 내 작업·프로젝트 일정을 받고, 새 주소를 만들면 옛 주소는 막힘', async () => {
+  const p = (await call('POST', '/projects', { name: '달력 시험', calendars: 'KR', day_basis: 'workday', phases: [] })).body;
+  await call('POST', `/projects/${p.id}/tasks`, { code: 'T1', name: '설계, 검토; 1차', start: '2027-03-02', end: '2027-03-05', owner: '관리자', is_key: true });
+  await call('POST', `/projects/${p.id}/tasks`, { code: 'T2', name: '남의 작업', start: '2027-03-08', end: '2027-03-08', owner: '김' });
+  const info = (await call('GET', '/me/calendar')).body;
+  assert.match(info.mine, /\/ics\/[0-9a-f]{48}\/mine\.ics$/);
+  const get = async url => { const r = await fetch(url); return { status: r.status, type: r.headers.get('content-type'), text: await r.text() }; };
+  const mine = await get(info.mine);
+  assert.equal(mine.status, 200);
+  assert.match(mine.type, /text\/calendar/);
+  assert.match(mine.text, /BEGIN:VCALENDAR\r\n/);
+  assert.match(mine.text, /DTSTART;VALUE=DATE:20270302\r\nDTEND;VALUE=DATE:20270306/);
+  assert.match(mine.text, /SUMMARY:★ \[T1\] 설계\\, 검토\\; 1차/);
+  assert.doesNotMatch(mine.text, /남의 작업/);
+  const proj = await get(info.projects.find(x => x.id === p.id).url);
+  assert.match(proj.text, /남의 작업/);
+  assert.ok(proj.text.split('\r\n').every(l => Buffer.byteLength(l) <= 75));
+  const again = (await call('POST', '/me/calendar/reset')).body;
+  assert.notEqual(again.mine, info.mine);
+  assert.equal((await get(info.mine)).status, 404);
+  assert.equal((await get(again.mine)).status, 200);
+});

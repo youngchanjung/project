@@ -192,6 +192,13 @@ const migrations = [
         if (!ex) await k('holidays').insert({ country: 'KR', date, name });
       }
     }
+  },
+  {
+    // Outlook 달력 구독(ICS) 주소용 개인 토큰. 006 은 회의록 기능(별도 브랜치)이 씀
+    name: '007_ics_token',
+    async up(k) {
+      await k.schema.alterTable('users', t => { t.string('ics_token', 64); t.unique(['ics_token']); });
+    }
   }
 ];
 

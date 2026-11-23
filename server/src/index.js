@@ -9,6 +9,7 @@ import { loadUser } from './auth.js';
 import { HttpError } from './util.js';
 import { translateMsg, reqLang } from './i18n.js';
 import { translateRouter } from './routes/translate.js';
+import { calendarRouter, icsRouter } from './routes/ics.js';
 import { sheetRouter } from './routes/sheet.js';
 import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
@@ -33,6 +34,7 @@ export function createApp() {
   api.use('/backup', backupRouter);
   api.use('/translate', translateRouter);
   api.use('/sheet.xlsx', sheetRouter);
+  api.use('/me/calendar', calendarRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
   api.use('/projects', projectsRouter);
@@ -43,6 +45,7 @@ export function createApp() {
   api.use('/projects/:pid/export.xlsx', exportRouter);
   api.use((_req, _res, next) => next(new HttpError(404, '없는 API입니다.')));
   app.use('/api', api);
+  app.use('/ics', icsRouter);
 
   // 화면 (web/dist) — npm run build 후 제공
   if (fs.existsSync(config.webDist)) {

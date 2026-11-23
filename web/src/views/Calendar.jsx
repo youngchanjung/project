@@ -3,6 +3,7 @@ import { useProject } from '../pages/Project.jsx';
 import { TaskRow } from './Dashboard.jsx';
 import { addD, fmtY, dow, weekday, monthAdd, downloadXLSX, taskCols } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
+import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr, locale } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -10,6 +11,7 @@ export default function Calendar() {
   const { filtered: ts, holidays, td, color, openTask, can, phases, tasks, deps, project, toast } = useProject();
   const [m, setM] = useState(td.slice(0, 7));
   const [sel, setSel] = useState(td);
+  const [subscribing, setSubscribing] = useState(false);
   const hm = new Map(holidays.map(h => [h.date, h.name.split('/').pop().trim()]));
   const start = addD(m + '-01', -((weekday(m + '-01') + 6) % 7));
   const cells = [];
@@ -51,6 +53,7 @@ export default function Calendar() {
           return downloadXLSX(`${project.name}_달력_${m}`, [{ name: `${m} 작업`, cols: taskCols({ phases, tasks, deps }), rows },
             { name: `${m} 공휴일`, cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']], rows: holidays.filter(h => h.date >= first && h.date <= last) }]);
         }} />
+        <button className="btn sm" onClick={() => setSubscribing(true)} title={tr('이 프로젝트 일정을 Outlook 달력에 띄웁니다.')}>📅 {tr('Outlook 달력에 구독')}</button>
         <span className="small">{tr('▶ 시작 · ■ 마감 · ★ 핵심 · 날짜를 누르면 그날 진행 중인 작업을 오른쪽에 보여줍니다')}{can() ? ` · ${tr('두 번 누르면 그 날짜로 작업 추가')}` : ''}</span>
       </div>
       <div className="calwrap">
@@ -60,6 +63,7 @@ export default function Calendar() {
           <div className="list">{active.map(t => <TaskRow key={t.id} t={t} right={<span className={`badge b-${t.st}`}>{tr(t.st)}</span>} />)}
             {!active.length && <div className="empty">{tr('이 날 진행되는 작업이 없습니다.')}</div>}</div></div>
       </div>
+      {subscribing && <CalendarSubscribe projectId={project.id} onClose={() => setSubscribing(false)} toast={toast} />}
     </>
   );
 }
