@@ -250,8 +250,57 @@ const migrations = [
         t.index(['user_id', 'id']);
       });
     }
+  },
+  {
+    // 11/24 개정 계획: 카테고리(연구·시공·설계), 칸반 열, 할 일 필드, 체크리스트. 기존 프로젝트는 모두 시공으로
+    name: '009_categories_board',
+    async up(k) {
+      await k.schema.alterTable('projects', t => {
+        t.string('category', 16).notNullable().defaultTo('construction'); // research | construction | design
+      });
+      await k.schema.createTable('board_columns', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('name', 60).notNullable();
+        t.string('color', 16);
+        t.string('status', 20).notNullable().defaultTo('미착수'); // 이 열에 놓으면 작업 상태가 이 값으로 바뀜
+        t.boolean('is_review').notNullable().defaultTo(false);
+        t.integer('sort').notNullable().defaultTo(0);
+        t.index(['project_id']);
+      });
+      await k.schema.alterTable('tasks', t => {
+        t.integer('board_column_id').references('board_columns.id').onDelete('SET NULL');
+        t.integer('board_order').notNullable().defaultTo(0);
+        t.string('priority', 8).notNullable().defaultTo('보통'); // 낮음 | 보통 | 높음 | 긴급
+        t.string('tags', 300);
+        t.integer('reviewer_id').references('users.id').onDelete('SET NULL');
+        t.boolean('undated').notNullable().defaultTo(false); // 마감일 없이 만든 할 일 (start/end 는 만든 날로 채워 둠)
+        t.string('created_at', 32);
+      });
+      await k.schema.createTable('task_checklist', t => {
+        t.increments('id');
+        t.integer('task_id').notNullable().references('tasks.id').onDelete('CASCADE');
+        t.string('text', 300).notNullable();
+        t.boolean('done').notNullable().defaultTo(false);
+        t.integer('sort').notNullable().defaultTo(0);
+        t.index(['task_id']);
+      });
+      for (const p of await k('projects').select('id')) await insertDefaultColumns(k, p.id);
+    }
   }
 ];
+
+export const DEFAULT_COLUMNS = [
+  { name: '할 일', color: '#8a93a6', status: '미착수' },
+  { name: '진행 중', color: '#2f6fde', status: '진행중' },
+  { name: '검토', color: '#d9822b', status: '진행중', is_review: true },
+  { name: '완료', color: '#159a8c', status: '완료' }
+];
+export async function insertDefaultColumns(k, projectId) {
+  for (const [i, c] of DEFAULT_COLUMNS.entries()) {
+    await k('board_columns').insert({ project_id: projectId, name: c.name, color: c.color, status: c.status, is_review: !!c.is_review, sort: i });
+  }
+}
 
 export async function migrate(k) {
   if (!(await k.schema.hasTable('schema_migrations'))) {

@@ -196,10 +196,11 @@ meRouter.get('/work', ah(async (req, res) => {
   const projects = await db('projects').where({ archived: false });
   const pids = projects.map(p => p.id);
   const pname = new Map(projects.map(p => [p.id, p.name]));
+  const pcat = new Map(projects.map(p => [p.id, p.category]));
   // 내게 배정된 것 + 담당 칸에 내 이름이 들어간 것
   const name = req.user.name;
   const tasks = (await db('tasks').whereIn('project_id', pids).andWhere(q => q.where('assignee_id', req.user.id).orWhere('owner', 'like', `%${name}%`)))
-    .map(x => ({ ...x, is_key: !!x.is_key, project_name: pname.get(x.project_id), state: stateOf(x, t) }))
+    .map(x => ({ ...x, is_key: !!x.is_key, undated: !!x.undated, project_name: pname.get(x.project_id), category: pcat.get(x.project_id), state: stateOf(x, t) }))
     .filter(x => x.state !== '완료');
   const issues = (await db('issues').whereIn('project_id', pids).whereNot('status', '해결완료').andWhere(q => q.where('assignee_id', req.user.id).orWhere('owner', 'like', `%${name}%`)))
     .map(x => ({ ...x, project_name: pname.get(x.project_id) }));

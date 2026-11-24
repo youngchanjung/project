@@ -4,12 +4,16 @@ import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet } from '../
 import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
 import { normCalendars } from '../countries.js';
 import { stateOf } from '../schedule.js';
+import { insertDefaultColumns } from '../migrations.js';
+import { TASK_STATUS } from './tasks.js';
 
 export const projectsRouter = Router();
 projectsRouter.use(requireLogin);
 
 const today = () => new Date().toISOString().slice(0, 10);
-const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis'];
+const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis', 'category'];
+export const CATEGORIES = ['research', 'construction', 'design'];
+const checkCategory = c => { if (c !== undefined && !CATEGORIES.includes(c)) throw new HttpError(400, '카테고리는 연구·시공·설계 중 하나입니다.'); };
 
 export async function loadProject(id) {
   const p = await db('projects').where({ id }).first();
@@ -26,7 +30,7 @@ export async function need(req, projectId, level = 'member') {
 projectsRouter.get('/', ah(async (req, res) => {
   const t = today();
   const ps = await db('projects').orderBy([{ column: 'archived' }, { column: 'name' }]);
-  const tasks = await db('tasks').select('project_id', 'name', 'start', 'end', 'status', 'actual_end', 'is_key', 'assignee_id');
+  const tasks = await db('tasks').select('project_id', 'name', 'start', 'end', 'status', 'actual_end', 'is_key', 'assignee_id', 'undated');
   const issues = await db('issues').select('project_id', 'status', 'resolved', 'target', 'priority');
   const mem = await db('project_members').where({ user_id: req.user.id });
   const pms = await db('project_members as m').join('users as u', 'u.id', 'm.user_id').where('m.role', 'pm').select('m.project_id', 'u.name');
@@ -34,8 +38,9 @@ projectsRouter.get('/', ah(async (req, res) => {
     const ts = tasks.filter(x => x.project_id === p.id);
     const st = ts.map(x => stateOf(x, t));
     const is = issues.filter(x => x.project_id === p.id && x.status !== '해결완료' && !x.resolved);
-    const nextKey = ts.filter(x => x.is_key && stateOf(x, t) !== '완료' && x.start >= t).sort((a, b) => a.start.localeCompare(b.start))[0];
-    const span = ts.length ? [ts.reduce((a, x) => x.start < a ? x.start : a, '9999'), ts.reduce((a, x) => x.end > a ? x.end : a, '0000')] : [null, null];
+    const nextKey = ts.filter(x => x.is_key && !x.undated && stateOf(x, t) !== '완료' && x.start >= t).sort((a, b) => a.start.localeCompare(b.start))[0];
+    const dated = ts.filter(x => !x.undated);
+    const span = dated.length ? [dated.reduce((a, x) => x.start < a ? x.start : a, '9999'), dated.reduce((a, x) => x.end > a ? x.end : a, '0000')] : [null, null];
     return {
       ...p, archived: !!p.archived,
       myRole: req.user.role === 'admin' ? 'pm' : (mem.find(m => m.project_id === p.id)?.role || 'viewer'),
@@ -56,11 +61,14 @@ projectsRouter.post('/', ah(async (req, res) => {
   const body = pick(req.body || {}, PCOLS);
   body.calendars = normCalendars(body.calendars);
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
+  if (!body.category) body.category = 'construction';
+  checkCategory(body.category);
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
     await trx('project_members').insert({ project_id: id, user_id: req.user.id, role: 'pm' });
     const phases = Array.isArray(req.body.phases) ? req.body.phases : [];
     for (const [i, name] of phases.entries()) if (name) await trx('phases').insert({ project_id: id, name, sort: i });
+    await insertDefaultColumns(trx, id);
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'create', label: body.name });
     return id;
   });
@@ -71,18 +79,21 @@ projectsRouter.post('/', ah(async (req, res) => {
 projectsRouter.get('/:id/data', ah(async (req, res) => {
   const id = Number(req.params.id);
   const project = await loadProject(id);
-  const [phases, tasks, deps, issues, members, role, hol] = await Promise.all([
+  const [phases, tasks, deps, issues, members, role, hol, columns, checklist] = await Promise.all([
     db('phases').where({ project_id: id }).orderBy('sort'),
     db('tasks').where({ project_id: id }).orderBy([{ column: 'sort' }, { column: 'start' }]),
     db('dependencies').where({ project_id: id }),
     db('issues').where({ project_id: id }).orderBy('code'),
     db('project_members as m').join('users as u', 'u.id', 'm.user_id').where('m.project_id', id).select('u.id', 'u.name', 'u.username', 'u.email', 'm.role'),
     projectRole(req.user, id),
-    db('holidays').whereIn('country', String(project.calendars || 'KR').split(',')).orderBy('date')
+    db('holidays').whereIn('country', String(project.calendars || 'KR').split(',')).orderBy('date'),
+    db('board_columns').where({ project_id: id }).orderBy('sort'),
+    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: id })).orderBy([{ column: 'task_id' }, { column: 'sort' }])
   ]);
   res.json({
     project: { ...project, archived: !!project.archived }, phases,
-    tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key })), deps, issues, members, role, holidays: hol
+    tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key, undated: !!t.undated })), deps, issues, members, role, holidays: hol,
+    columns: columns.map(c => ({ ...c, is_review: !!c.is_review })), checklist: checklist.map(c => ({ ...c, done: !!c.done }))
   });
 }));
 
@@ -94,6 +105,7 @@ projectsRouter.patch('/:id', ah(async (req, res) => {
   if (up.calendars !== undefined) up.calendars = normCalendars(up.calendars);
   if (up.name !== undefined && !String(up.name).trim()) throw new HttpError(400, '프로젝트 이름은 비울 수 없습니다.');
   if (up.archived !== undefined) up.archived = !!up.archived;
+  checkCategory(up.category);
   await db('projects').where({ id }).update({ ...up, updated_at: now() });
   await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: before.name, changes: diff(before, up) });
   res.json(await loadProject(id));
@@ -105,7 +117,8 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
   const p = await loadProject(id);
   await db.transaction(async trx => {
     for (const t of ['issue_comments']) await trx(t).whereIn('issue_id', trx('issues').select('id').where({ project_id: id })).del();
-    for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
+    await trx('task_checklist').whereIn('task_id', trx('tasks').select('id').where({ project_id: id })).del();
+    for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
   });
@@ -161,12 +174,66 @@ projectsRouter.delete('/:id/phases/:pid', ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// ---- 칸반 열 ----
+function cleanColumn(b, partial) {
+  const c = pick(b || {}, ['name', 'color', 'status', 'is_review', 'sort']);
+  if (!partial || c.name !== undefined) {
+    c.name = String(c.name || '').trim();
+    if (!c.name) throw new HttpError(400, '열 이름을 입력하세요.');
+  }
+  if (c.status !== undefined && !TASK_STATUS.includes(c.status)) throw new HttpError(400, `상태는 ${TASK_STATUS.join('/')} 중 하나입니다.`);
+  if (c.is_review !== undefined) c.is_review = !!c.is_review;
+  return c;
+}
+projectsRouter.post('/:id/columns', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id, 'pm');
+  const c = cleanColumn(req.body, false);
+  const { m } = await db('board_columns').where({ project_id: id }).max({ m: 'sort' }).first();
+  const cid = await insertId(db, 'board_columns', { status: '진행중', ...c, project_id: id, sort: (m ?? -1) + 1 });
+  await audit(null, { user: req.user, projectId: id, entity: 'column', entityId: cid, action: 'create', label: c.name });
+  res.json(await db('board_columns').where({ id: cid }).first());
+}));
+projectsRouter.patch('/:id/columns/:cid', ah(async (req, res) => {
+  const id = Number(req.params.id), cid = Number(req.params.cid);
+  await need(req, id, 'pm');
+  const before = await db('board_columns').where({ id: cid, project_id: id }).first();
+  if (!before) throw new HttpError(404, '열이 없습니다.');
+  const up = cleanColumn(req.body, true);
+  await db('board_columns').where({ id: cid }).update(up);
+  await audit(null, { user: req.user, projectId: id, entity: 'column', entityId: cid, action: 'update', label: up.name || before.name, changes: diff(before, up) });
+  res.json(await db('board_columns').where({ id: cid }).first());
+}));
+// 열 순서 바꾸기: { ids: [열 id 순서대로] }
+projectsRouter.put('/:id/columns-order', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id, 'pm');
+  const ids = (req.body?.ids || []).map(Number);
+  await db.transaction(async trx => {
+    for (const [i, cid] of ids.entries()) await trx('board_columns').where({ id: cid, project_id: id }).update({ sort: i });
+  });
+  res.json({ ok: true });
+}));
+projectsRouter.delete('/:id/columns/:cid', ah(async (req, res) => {
+  const id = Number(req.params.id), cid = Number(req.params.cid);
+  await need(req, id, 'pm');
+  const cols = await db('board_columns').where({ project_id: id });
+  const c = cols.find(x => x.id === cid);
+  if (!c) throw new HttpError(404, '열이 없습니다.');
+  if (cols.length <= 1) throw new HttpError(400, '열은 하나 이상 있어야 합니다.');
+  // 이 열의 카드는 상태가 같은 다른 열(없으면 첫 열)로 자동 배치됨
+  await db('tasks').where({ board_column_id: cid }).update({ board_column_id: null });
+  await db('board_columns').where({ id: cid }).del();
+  await audit(null, { user: req.user, projectId: id, entity: 'column', entityId: cid, action: 'delete', label: c.name });
+  res.json({ ok: true });
+}));
+
 // ---- 기준 일정 확정: 현재 시작/종료를 기준 일정으로 저장 ----
 projectsRouter.post('/:id/baseline', ah(async (req, res) => {
   const id = Number(req.params.id);
   await need(req, id, 'pm');
   const onlyMissing = !!req.body?.onlyMissing;
-  const q = db('tasks').where({ project_id: id });
+  const q = db('tasks').where({ project_id: id, undated: false });
   if (onlyMissing) q.whereNull('baseline_end');
   const n = await q.update({ baseline_start: db.ref('start'), baseline_end: db.ref('end') });
   await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'baseline', label: `기준 일정 확정 (${n}건)` });

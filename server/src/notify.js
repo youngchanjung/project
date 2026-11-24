@@ -45,7 +45,7 @@ export async function dailyDue(user) {
   const soon = addDays(today, 3);
   for (const t of tasks) {
     const st = stateOf(t, today);
-    if (st === '완료' || st === '보류') continue;
+    if (st === '완료' || st === '보류' || t.undated) continue;
     const params = { name: t.name, code: t.code, date: t.end };
     if (st === '지연') await notify(null, [user.id], { kind: 'task_late', projectId: t.project_id, entity: 'task', entityId: t.id, params, dedupe: `late:${t.id}:${t.end}` });
     else if (t.end >= today && t.end <= soon) await notify(null, [user.id], { kind: 'task_due', projectId: t.project_id, entity: 'task', entityId: t.id, params, dedupe: `due:${t.id}:${t.end}` });

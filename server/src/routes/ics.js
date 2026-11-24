@@ -110,7 +110,7 @@ icsRouter.get('/:token/:file', ah(async (req, res) => {
   if (req.params.file === 'mine.ics') {
     const live = projects.filter(p => !p.archived).map(p => p.id);
     const mine = q => q.where('assignee_id', u.id).orWhere('owner', 'like', `%${u.name}%`);
-    const tasks = await db('tasks').whereIn('project_id', live).andWhere(mine);
+    const tasks = await db('tasks').whereIn('project_id', live).andWhere({ undated: false }).andWhere(mine);
     const issues = await db('issues').whereIn('project_id', live).whereNot('status', '해결완료').whereNotNull('target').andWhere(mine);
     name = `${T('내 작업')} · ${u.name}`;
     events = [
@@ -126,7 +126,7 @@ icsRouter.get('/:token/:file', ah(async (req, res) => {
     const m = req.params.file.match(/^project-(\d+)\.ics$/);
     const pid = m && Number(m[1]);
     if (!pid || !pname.has(pid)) throw new HttpError(404, '프로젝트가 없습니다.');
-    const tasks = await db('tasks').where({ project_id: pid });
+    const tasks = await db('tasks').where({ project_id: pid, undated: false });
     name = pname.get(pid);
     events = tasks.map(t => taskEvent(t, { req, lang, pname: null, phase: phases.get(t.phase_id), today }));
   }

@@ -16,6 +16,7 @@ export const monthAdd = (ym, n) => { const d = D(ym + '-01'); d.setUTCMonth(d.ge
 export function stateOf(t, td) {
   if (t.status === '완료' || t.actual_end) return '완료';
   if (t.status === '보류') return '보류';
+  if (t.undated) return t.status === '진행중' ? '진행중' : '예정';
   if (t.end < td) return '지연';
   if (t.start <= td) return '진행중';
   return '예정';
