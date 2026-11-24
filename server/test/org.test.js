@@ -201,3 +201,14 @@ test('알림: 작업 배정·일정 변경(자동 조정 포함)·이슈 댓글�
   assert.equal(again.items.length, 5);
   await call('POST', '/auth/login', { username: 'admin', password: 'admin1234' });
 });
+
+test('프로젝트 삭제: 작업·선행관계·이슈·댓글이 있어도 관리자는 삭제 가능', async () => {
+  const p = (await call('POST', '/projects', { name: '삭제 시험' })).body;
+  const a = (await call('POST', `/projects/${p.id}/tasks`, { name: 'a', start: '2026-11-02', end: '2026-11-05' })).body.task;
+  const b = (await call('POST', `/projects/${p.id}/tasks`, { name: 'b', start: '2026-11-06', end: '2026-11-09', assignee_id: 1 })).body.task;
+  assert.equal((await call('POST', `/projects/${p.id}/deps`, { pred_id: a.id, succ_id: b.id })).status, 200);
+  const is = (await call('POST', `/projects/${p.id}/issues`, { title: 'i', task_id: a.id, assignee_id: 1 })).body;
+  await call('POST', `/projects/${p.id}/issues/${is.id}/comments`, { body: 'c' });
+  assert.equal((await call('DELETE', `/projects/${p.id}`)).status, 200);
+  assert.ok(!(await call('GET', '/projects')).body.find(x => x.id === p.id));
+});
