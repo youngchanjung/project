@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
 import { useApp } from '../App.jsx';
 import History from '../components/History.jsx';
+import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
 import { ROLE_NAME, PALETTE } from '../util.js';
 import { tr } from '../i18n.js';
@@ -35,10 +36,7 @@ function Info() {
     try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
     catch (e) { setErr(e.message); }
   };
-  const del = async () => {
-    if (prompt(tr('프로젝트와 모든 작업·이슈가 삭제됩니다. 되돌릴 수 없습니다.') + '\n' + tr('삭제하려면 프로젝트 이름을 입력하세요: {name}', { name: project.name })) !== project.name) return;
-    try { await api.del(`/projects/${project.id}`); nav('/'); } catch (e) { setErr(e.message); }
-  };
+  const [delOpen, setDelOpen] = useState(false);
   return (
     <div className="card"><h3>{tr('프로젝트 정보')}</h3>
       {err && <div className="err">{err}</div>}
@@ -57,11 +55,41 @@ function Info() {
         <select value={f.day_basis} onChange={set('day_basis')}><option value="workday">{tr('근무일 (주말·공휴일 제외)')}</option><option value="calendar">{tr('달력일 (모든 날 포함)')}</option></select>
       </div></fieldset>
       {ed && <div className="actions">
-        {user.role === 'admin' && <button className="btn danger" onClick={del} style={{ marginRight: 'auto' }}>{tr('프로젝트 삭제')}</button>}
+        {user.role === 'admin' && <button className="btn danger" onClick={() => setDelOpen(true)} style={{ marginRight: 'auto' }}>{tr('프로젝트 삭제')}</button>}
         <button className="btn" onClick={() => save({ archived: !project.archived })}>{tr(project.archived ? '보관 해제' : '보관 (목록에서 숨김)')}</button>
         <button className="btn primary" onClick={() => save()}>{tr('저장')}</button>
       </div>}
+      {delOpen && <DeleteProject project={project} onClose={() => setDelOpen(false)} onDone={() => { toast(tr('프로젝트를 삭제했습니다.')); nav('/'); }} />}
     </div>
+  );
+}
+
+// 프로젝트 삭제 확인 창: 이름을 입력해야 삭제 버튼이 켜짐.
+// (예전에는 브라우저 prompt 를 썼는데, 이름이 조금만 달라도 아무 안내 없이 멈춰서 삭제가 안 되는 것처럼 보였음)
+const norm = s => String(s ?? '').normalize('NFC').replace(/\s+/g, ' ').trim();
+function DeleteProject({ project, onClose, onDone }) {
+  const [typed, setTyped] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState(null);
+  const ok = norm(typed) === norm(project.name);
+  const run = async () => {
+    if (!ok || busy) return;
+    setBusy(true); setErr(null);
+    try { await api.del(`/projects/${project.id}`); onDone(); }
+    catch (e) { setErr(e.message); setBusy(false); }
+  };
+  return (
+    <Modal title={tr('프로젝트 삭제')} onClose={onClose}>
+      <p>{tr('프로젝트와 모든 작업·이슈가 삭제됩니다. 되돌릴 수 없습니다.')}</p>
+      <p className="small">{tr('삭제하려면 프로젝트 이름을 입력하세요: {name}', { name: '' })}<b style={{ userSelect: 'all' }}>{project.name}</b></p>
+      <input type="text" autoFocus value={typed} onChange={e => setTyped(e.target.value)} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) run(); }} style={{ width: '100%' }} />
+      {typed && !ok && <div className="small" style={{ color: 'var(--late)', marginTop: 4 }}>{tr('이름이 일치하지 않습니다.')}</div>}
+      {err && <div className="err">{err}</div>}
+      <div className="actions">
+        <button className="btn" onClick={onClose}>{tr('취소')}</button>
+        <button className="btn danger" disabled={!ok || busy} onClick={run}>{busy ? tr('삭제 중…') : tr('삭제')}</button>
+      </div>
+    </Modal>
   );
 }
 
