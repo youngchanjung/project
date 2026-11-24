@@ -1,8 +1,9 @@
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { NavLink, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
-import { useApp } from '../App.jsx';
-import { today, stateOf, phaseColor, ROLE_NAME } from '../util.js';
+import { useApp, rememberProject } from '../App.jsx';
+import Dropdown from '../components/Dropdown.jsx';
+import { today, stateOf, phaseColor, ROLE_NAME, PALETTE } from '../util.js';
 import Dashboard from '../views/Dashboard.jsx';
 import Gantt from '../views/Gantt.jsx';
 import Calendar from '../views/Calendar.jsx';
@@ -29,7 +30,7 @@ export default function Project() {
   const td = today();
 
   const reload = useCallback(() => api.get(`/projects/${id}/data`).then(setData).catch(e => setErr(e.message)), [id]);
-  useEffect(() => { setData(null); reload(); }, [reload]);
+  useEffect(() => { setData(null); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
   // ?open=ID 로 들어오면 해당 작업/이슈 열기 (홈 화면 링크)
   useEffect(() => {
     const open = sp.get('open');
@@ -66,10 +67,12 @@ export default function Project() {
   return (
     <Ctx.Provider value={ctx}>
       <main className="page">
-        <div className="toolbar" style={{ marginBottom: 6 }}>
-          <h1 className="title" style={{ margin: 0 }}>{p.name}</h1>
-          <span className="small">{[p.code, p.client, `${tr('내 역할')}: ${tr(ROLE_NAME[role])}`, tr(p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준')].filter(Boolean).join(' · ')}</span>
-          {p.archived && <span className="badge b-보류">{tr('보관됨')}</span>}
+        <div className="phead">
+          <span className="picon" style={{ background: PALETTE[p.id % PALETTE.length] }}>{(p.name || '?').slice(0, 1)}</span>
+          <div className="ptitle">
+            <h1 className="title">{p.name}{p.archived && <span className="badge b-보류" style={{ marginLeft: 8, verticalAlign: 3 }}>{tr('보관됨')}</span>}</h1>
+            <span className="small">{[p.code, p.client, `${tr('내 역할')}: ${tr(ROLE_NAME[role])}`, tr(p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준')].filter(Boolean).join(' · ')}</span>
+          </div>
           <div className="sp" />
           {can() && <button className="btn" onClick={() => ctx.openIssue(null)}>{tr('+ 이슈')}</button>}
           {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr('+ 작업')}</button>}
@@ -79,7 +82,7 @@ export default function Project() {
         </nav>
         <Routes>
           <Route index element={<><FilterBar /><Dashboard /></>} />
-          <Route path="gantt" element={<><FilterBar /><Gantt /></>} />
+          <Route path="gantt" element={<Gantt />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />
@@ -93,24 +96,32 @@ export default function Project() {
   );
 }
 
-function FilterBar() {
+// 검색·단계·완료 숨기기 (대시보드·간트·달력·작업 목록 공통). children: 화면별 도구 (오른쪽에 붙음)
+export function FilterBar({ children, right }) {
   const { phases, filter, setFilter, color, tasks } = useProject();
   const groups = [...phases.filter(p => tasks.some(t => t.phase_id === p.id)).map(p => ({ id: p.id, name: p.name })), ...(tasks.some(t => !t.phase_id) ? [{ id: 0, name: tr('단계 없음') }] : [])];
-  const toggle = (gid, e) => {
-    if (e.ctrlKey || e.metaKey) return setFilter({ ...filter, off: groups.map(g => g.id).filter(x => x !== gid) });
-    setFilter({ ...filter, off: filter.off.includes(gid) ? filter.off.filter(x => x !== gid) : [...filter.off, gid] });
-  };
+  const set = (gid, on) => setFilter({ ...filter, off: on ? filter.off.filter(x => x !== gid) : [...filter.off, gid] });
+  const shown = groups.filter(g => !filter.off.includes(g.id)).length;
   return (
     <div className="toolbar">
-      <input type="search" placeholder={tr('작업명·담당·ID 검색')} value={filter.q} onChange={e => setFilter({ ...filter, q: e.target.value })} style={{ width: 200 }} />
-      <span className={`chip ${filter.hideDone ? 'on' : ''}`} onClick={() => setFilter({ ...filter, hideDone: !filter.hideDone })}>{tr('완료 숨기기')}</span>
-      <span className="small">{tr('단계:')}</span>
-      <span className="chip" onClick={() => setFilter({ ...filter, off: filter.off.length ? [] : groups.map(g => g.id) })} title={tr('모두 켜기/끄기')}>{tr('전체')}</span>
-      {groups.map(g => (
-        <span key={g.id} className={`chip ${filter.off.includes(g.id) ? '' : 'on'}`} onClick={e => toggle(g.id, e)} title={tr('Ctrl+클릭: 이 단계만 보기')}>
-          <span className="dot" style={{ background: g.id ? color(g.id) : '#8a93a6' }} />{g.name}
-        </span>
-      ))}
+      <input type="search" className="tsearch" placeholder={tr('작업명·담당·ID 검색')} value={filter.q} onChange={e => setFilter({ ...filter, q: e.target.value })} />
+      <Dropdown label={shown === groups.length ? tr('단계: 전체') : tr('단계: {n}개', { n: shown })} active={shown !== groups.length} title={tr('보여 줄 단계를 고릅니다.')}>
+        <div className="dd-tools">
+          <button className="btn sm" onClick={() => setFilter({ ...filter, off: [] })}>{tr('모두 보기')}</button>
+          <button className="btn sm" onClick={() => setFilter({ ...filter, off: groups.map(g => g.id) })}>{tr('모두 끄기')}</button>
+        </div>
+        {groups.map(g => (
+          <label key={g.id} className="dd-row">
+            <input type="checkbox" checked={!filter.off.includes(g.id)} onChange={e => set(g.id, e.target.checked)} />
+            <span className="dot" style={{ background: g.id ? color(g.id) : '#8a93a6' }} /><span className="t">{g.name}</span>
+            <button className="btn sm only" onClick={e => { e.preventDefault(); setFilter({ ...filter, off: groups.map(x => x.id).filter(x => x !== g.id) }); }}>{tr('이것만')}</button>
+          </label>
+        ))}
+      </Dropdown>
+      <button type="button" className={`tbtn ${filter.hideDone ? 'on' : ''}`} onClick={() => setFilter({ ...filter, hideDone: !filter.hideDone })}>{filter.hideDone ? '✓ ' : ''}{tr('완료 숨기기')}</button>
+      {children}
+      <div className="sp" />
+      {right}
     </div>
   );
 }

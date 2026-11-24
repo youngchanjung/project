@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
-import { Routes, Route, NavLink, Navigate, useNavigate } from 'react-router-dom';
+import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
+import { PALETTE } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
 import Home from './pages/Home.jsx';
@@ -17,6 +18,8 @@ export default function App() {
   const [user, setUser] = useState(undefined);
   const [toastMsg, setToastMsg] = useState(null);
   const [pwOpen, setPwOpen] = useState(false);
+  // 왼쪽 메뉴 펼침 (좁은 화면에서는 처음에 접어 둠)
+  const [side, setSide] = useState(() => { try { const v = localStorage.getItem('side-open'); if (v) return v === '1'; } catch {} return window.innerWidth > 1000; });
   const [lang, setLangState] = useState(getLang());
   // 화면 언어 바꾸기: 이 브라우저에 기억하고, 로그인한 경우 계정에도 저장
   const changeLang = useCallback(l => {
@@ -45,31 +48,92 @@ export default function App() {
   if (!user) return <Ctx.Provider value={{ user, setUser, toast, lang }}><div style={{ display: 'flex', justifyContent: 'flex-end', padding: 12 }}><LangSelect lang={lang} onChange={changeLang} /></div><Login /></Ctx.Provider>;
 
   const logout = async () => { await api.post('/auth/logout'); setUser(null); nav('/'); };
+  const toggleSide = () => setSide(v => { const n = !v; try { localStorage.setItem('side-open', n ? '1' : '0'); } catch {} return n; });
   return (
     <Ctx.Provider value={{ user, setUser, toast, lang }}>
-      <header className="topbar">
-        <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>
-        <nav>
-          <NavLink to="/" end className="navlink">{tr('홈')}</NavLink>
-          {user.role === 'admin' && <NavLink to="/admin" className="navlink">{tr('관리')}</NavLink>}
-        </nav>
-        <div className="sp" />
-        <LangSelect lang={lang} onChange={changeLang} />
-        <ContentTrToggle />
-        <Bell />
-        <span className="small">{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
-        <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
-        <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
-      </header>
-      <Routes key={lang}>
-        <Route path="/" element={<Home />} />
-        <Route path="/projects/:id/*" element={<Project />} />
-        <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
-        <Route path="*" element={<Navigate to="/" />} />
-      </Routes>
+      <div className={`shell ${side ? '' : 'side-off'}`}>
+        <aside className="side">
+          <div className="side-head">
+            <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>
+            <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 접기')}>«</button>
+          </div>
+          <nav className="side-nav">
+            <NavLink to="/" end className="snav"><span className="ico">🏠</span>{tr('홈')}</NavLink>
+            {user.role === 'admin' && <NavLink to="/admin" className="snav"><span className="ico">⚙️</span>{tr('관리')}</NavLink>}
+          </nav>
+          <SideProjects />
+        </aside>
+        {side && <div className="side-dim" onClick={toggleSide} />}
+        <div className="maincol">
+          <header className="topbar">
+            {!side && <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 펼치기')}>☰</button>}
+            {!side && <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>}
+            <div className="sp" />
+            <LangSelect lang={lang} onChange={changeLang} />
+            <ContentTrToggle />
+            <Bell />
+            <span className="me"><span className="avatar">{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
+            <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
+            <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
+          </header>
+          <Routes key={lang}>
+            <Route path="/" element={<Home />} />
+            <Route path="/projects/:id/*" element={<Project />} />
+            <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
+            <Route path="*" element={<Navigate to="/" />} />
+          </Routes>
+        </div>
+      </div>
       {pwOpen && <PasswordModal onClose={() => setPwOpen(false)} />}
       {toastMsg && <div className="toast">{toastMsg}</div>}
     </Ctx.Provider>
+  );
+}
+
+// 최근 본 프로젝트 기록 (프로젝트 화면을 열 때 호출)
+export function rememberProject(id) {
+  try {
+    const l = JSON.parse(localStorage.getItem('recent-projects') || '[]').filter(x => x !== id);
+    localStorage.setItem('recent-projects', JSON.stringify([id, ...l].slice(0, 5)));
+    window.dispatchEvent(new Event('recent-projects'));
+  } catch {}
+}
+const projColor = p => PALETTE[p.id % PALETTE.length];
+
+// 왼쪽 메뉴의 프로젝트 목록: 최근 본 프로젝트, 내 프로젝트, 그 밖의 프로젝트
+function SideProjects() {
+  const [ps, setPs] = useState([]);
+  const [recent, setRecent] = useState([]);
+  const [open, setOpen] = useState(() => { try { return JSON.parse(localStorage.getItem('side-sec') || '{}'); } catch { return {}; } });
+  const loc = useLocation();
+  useEffect(() => { api.get('/projects').then(setPs).catch(() => {}); }, [loc.pathname === '/']); // eslint-disable-line
+  useEffect(() => {
+    const h = () => { try { setRecent(JSON.parse(localStorage.getItem('recent-projects') || '[]')); } catch {} };
+    h(); window.addEventListener('recent-projects', h);
+    return () => window.removeEventListener('recent-projects', h);
+  }, []);
+  const live = ps.filter(p => !p.archived);
+  const byId = new Map(live.map(p => [p.id, p]));
+  const secs = [
+    ['recent', tr('최근 본 프로젝트'), recent.map(id => byId.get(id)).filter(Boolean)],
+    ['mine', tr('내 프로젝트'), live.filter(p => p.member)],
+    ['others', tr('그 밖의 프로젝트'), live.filter(p => !p.member)]
+  ];
+  const flip = k => setOpen(o => { const n = { ...o, [k]: o[k] === false }; try { localStorage.setItem('side-sec', JSON.stringify(n)); } catch {} return n; });
+  return (
+    <div className="side-secs">
+      {secs.filter(([, , l]) => l.length).map(([k, name, list]) => (
+        <div key={k} className="side-sec">
+          <div className="side-sec-h" onClick={() => flip(k)}>{name}<span className="small">{open[k] === false ? '▸' : '▾'}</span></div>
+          {open[k] !== false && list.map(p => (
+            <NavLink key={p.id} to={`/projects/${p.id}`} className="sproj" title={p.name}>
+              <span className="sq" style={{ background: projColor(p) }} /><span className="t">{p.name}</span>
+              {p.stats?.late > 0 && <span className="cnt" title={tr('기한 초과 작업')}>{p.stats.late}</span>}
+            </NavLink>
+          ))}
+        </div>
+      ))}
+    </div>
   );
 }
 
