@@ -194,6 +194,39 @@ const migrations = [
     }
   },
   {
+    // 회의록: 녹음 파일, 음성인식 결과(전사본), AI 정리 결과
+    name: '006_meetings',
+    async up(k) {
+      await k.schema.createTable('meetings', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('title', 300).notNullable();
+        t.string('held_at', 16); // YYYY-MM-DDTHH:MM
+        t.text('attendees');
+        t.string('language', 8).notNullable().defaultTo('ko'); // ko | vi | en | multi (회의에서 쓴 언어)
+        t.string('audio_file', 200); // data/meetings 안의 파일 이름
+        t.string('audio_name', 300); // 올린 파일 원래 이름
+        t.bigInteger('audio_size');
+        t.integer('duration_ms');
+        // draft(메모만) | uploaded(녹음만, 음성인식 꺼짐) | transcribing | transcribed | summarizing | done | error
+        t.string('status', 16).notNullable().defaultTo('draft');
+        t.string('stt_job_id', 100);
+        t.text('transcript'); // JSON [{t, d, spk, text, lang}]
+        t.text('speakers'); // JSON {화자번호: 이름}
+        t.text('notes'); // 직접 적은 메모
+        t.text('summary'); // JSON (AI 정리 결과, 사람이 고칠 수 있음)
+        t.string('summarized_at', 32);
+        t.text('error');
+        t.integer('version').notNullable().defaultTo(1);
+        t.integer('created_by');
+        t.string('created_at', 32);
+        t.string('updated_at', 32);
+        t.integer('updated_by');
+        t.index(['project_id']);
+      });
+    }
+  },
+  {
     // Outlook 달력 구독(ICS) 주소용 개인 토큰. 006 은 회의록 기능(별도 브랜치)이 씀
     name: '007_ics_token',
     async up(k) {
