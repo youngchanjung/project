@@ -287,8 +287,176 @@ const migrations = [
       });
       for (const p of await k('projects').select('id')) await insertDefaultColumns(k, p.id);
     }
+  },
+  {
+    // 2단계(연구 일정): 회의 시각·장소·참석자·링크, 칸반 검토 흐름, 연구 과제 정보
+    name: '010_research_schedule',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('start_time', 5); // HH:MM (회의 등 시각이 있는 일정)
+        t.string('end_time', 5);
+        t.string('location', 200);
+        t.text('attendees'); // 참석자 계정 id 쉼표 구분
+        t.string('meeting_url', 500); // Teams 회의 링크 (3단계에서 자동 생성 예정)
+        t.string('outlook_event_id', 200); // 3단계 Outlook 동기화용
+        t.string('review_state', 12); // requested | approved | rejected
+        t.text('review_note');
+      });
+      await k.schema.alterTable('projects', t => {
+        t.string('agreement_start', 10); // 연구: 협약 기간
+        t.string('agreement_end', 10);
+        t.string('partners', 300); // 연구: 협력 기관
+      });
+    }
+  },
+  {
+    // 시공 일정 재구성(11/25): 업체·공종, 기준선 버전
+    name: '011_construction_schedule',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('company', 120); // 업체(협력사)
+        t.string('trade', 80); // 공종
+      });
+      await k.schema.createTable('baselines', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('name', 100).notNullable();
+        t.integer('count').notNullable().defaultTo(0);
+        t.string('created_at', 32);
+        t.integer('created_by');
+        t.index(['project_id']);
+      });
+      await k.schema.createTable('baseline_tasks', t => {
+        t.increments('id');
+        t.integer('baseline_id').notNullable().references('baselines.id').onDelete('CASCADE');
+        t.integer('task_id').notNullable().references('tasks.id').onDelete('CASCADE');
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.index(['baseline_id']);
+      });
+    }
+  },
+  {
+    // 시공 2·3순위(11/25): 마감일, 실제 시작일, 하위 작업(WBS), 간트 머리 기간 표시
+    name: '012_construction_more',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('deadline', 10); // 마감일: 종료일이 이 날을 넘으면 경고
+        t.string('actual_start', 10); // 실제 시작일 (주간 진척 입력)
+        t.integer('parent_id'); // 상위 작업 (하위 작업이 있으면 요약 작업)
+        t.index(['parent_id']);
+      });
+      await k.schema.createTable('timeline_events', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('name', 100).notNullable();
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.string('color', 9).notNullable().defaultTo('#d9822b');
+        t.index(['project_id']);
+      });
+    }
+  },
+  {
+    // 설계 1순위(11/25): 예상 시간·사람별 업무량, 단계 제출일, 프로젝트 템플릿
+    name: '013_design_workload',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.float('est_hours'); // 예상 시간 (선택 입력, 업무량 계산용)
+      });
+      await k.schema.alterTable('phases', t => {
+        t.string('due', 10); // 제출일 (설계: 계획·기본·실시설계 제출 등)
+      });
+      await k.schema.alterTable('users', t => {
+        t.float('weekly_hours').notNullable().defaultTo(40); // 주당 근무 가능 시간 (업무량 기준)
+      });
+      await k.schema.createTable('project_templates', t => {
+        t.increments('id');
+        t.string('name', 100).notNullable();
+        t.string('category', 16).notNullable().defaultTo('design');
+        t.text('data').notNullable(); // JSON: { phases, columns, tasks }
+        t.string('created_at', 32);
+        t.integer('created_by');
+      });
+      await k('project_templates').insert({ name: '건축 설계 기본', category: 'design', data: JSON.stringify(BUILTIN_DESIGN_TEMPLATE), created_at: new Date().toISOString() });
+    }
+  },
+  {
+    // 설계 2·3순위(11/25): 투입 시간 기록, 휴가·부재, 외부 협력자
+    name: '014_design_time_leave',
+    async up(k) {
+      await k.schema.createTable('time_entries', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.integer('task_id').references('tasks.id').onDelete('SET NULL');
+        t.integer('user_id').notNullable().references('users.id').onDelete('CASCADE');
+        t.string('date', 10).notNullable();
+        t.float('hours').notNullable();
+        t.string('note', 300);
+        t.string('created_at', 32);
+        t.index(['project_id']); t.index(['user_id', 'date']);
+      });
+      await k.schema.createTable('leaves', t => {
+        t.increments('id');
+        t.integer('user_id').notNullable().references('users.id').onDelete('CASCADE');
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.string('kind', 12).notNullable().defaultTo('휴가'); // 휴가 | 반차 | 출장 | 교육 | 기타
+        t.string('note', 200);
+        t.string('created_at', 32);
+        t.integer('created_by');
+        t.index(['user_id']);
+      });
+      await k.schema.alterTable('users', t => {
+        t.boolean('external').notNullable().defaultTo(false); // 외부 협력자: 참여 프로젝트의 자기 카드만 봄
+      });
+    }
+    },
+  {
+    // 시공 4단계(11/25): 공정률 가중치, 현장 사진·첨부
+    name: '015_construction_photos',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.float('weight'); // 공정률 가중치 (공사비 등). 비우면 기간으로 계산
+      });
+      await k.schema.createTable('attachments', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.integer('task_id').references('tasks.id').onDelete('SET NULL');
+        t.integer('issue_id').references('issues.id').onDelete('SET NULL');
+        t.string('file', 200).notNullable(); // 저장 이름 (attachments/<프로젝트>/<id>.<확장자>)
+        t.string('name', 300).notNullable(); // 올린 파일 이름
+        t.string('mime', 120);
+        t.integer('size');
+        t.string('note', 300);
+        t.string('taken_on', 10); // 촬영·작성일 (기본: 올린 날)
+        t.integer('created_by');
+        t.string('created_at', 32);
+        t.index(['project_id']); t.index(['task_id']); t.index(['issue_id']);
+      });
+    }
   }
 ];
+
+// 처음 깔 때 들어가는 설계 템플릿 예시 (프로젝트 설정에서 지울 수 있음). 칸반 열이 없으면 기본 4열
+export const BUILTIN_DESIGN_TEMPLATE = {
+  phases: [{ name: '계획설계', color: '#2f6fde' }, { name: '기본설계', color: '#8e5bd8' }, { name: '실시설계', color: '#d9822b' }, { name: '인허가', color: '#159a8c' }],
+  tasks: [
+    { name: '현황 조사·법규 검토', phase: 0, checklist: ['대지 현황 사진', '용도지역·건폐율·용적률 확인', '관련 법규 목록'] },
+    { name: '배치·매스 계획안', phase: 0, checklist: ['대안 2~3개', '면적표'] },
+    { name: '계획설계 보고', phase: 0, type: '제출', is_key: true },
+    { name: '평면도', phase: 1, tags: '평면' },
+    { name: '입면·단면도', phase: 1, tags: '입면, 단면' },
+    { name: '구조·설비 협의', phase: 1, checklist: ['구조 협의 회의', '설비 협의 회의'] },
+    { name: '기본설계 제출', phase: 1, type: '제출', is_key: true },
+    { name: '상세도', phase: 2, tags: '상세' },
+    { name: '마감·창호 일람표', phase: 2 },
+    { name: '도면 검토(체크리스트)', phase: 2, checklist: ['도면 번호·목록', '치수 확인', '구조·설비 도면과 대조'] },
+    { name: '실시설계 제출', phase: 2, type: '제출', is_key: true },
+    { name: '인허가 서류 준비', phase: 3, checklist: ['건축허가 신청서', '설계도서', '관련 협의 서류'] },
+    { name: '건축허가 접수', phase: 3, type: '제출', is_key: true }
+  ]
+};
 
 export const DEFAULT_COLUMNS = [
   { name: '할 일', color: '#8a93a6', status: '미착수' },

@@ -17,6 +17,15 @@ function message(n) {
     case 'issue_comment': return tr('{by}님의 댓글: {text}', { by: p.by || '', text: p.text || '' });
     case 'task_due': return tr('마감이 다가옵니다: {date}', { date: fmt(p.date) });
     case 'task_late': return tr('기한이 지났습니다: {date}', { date: fmt(p.date) });
+    case 'review_requested': return tr('{by}님이 검토를 요청했습니다.', { by: p.by || '' });
+    case 'review_approved': return tr('{by}님이 승인했습니다.', { by: p.by || '' });
+    case 'review_rejected': return tr('{by}님이 반려했습니다.', { by: p.by || '' }) + (p.note ? ` · ${p.note}` : '');
+    case 'meeting_invited': return tr('{by}님이 회의에 초대했습니다: {when}', { by: p.by || '', when: [fmt(p.date), p.time, p.location].filter(Boolean).join(' ') });
+    case 'meeting_changed': return tr('회의 시간·장소가 바뀌었습니다: {when}', { when: [fmt(p.date), p.time, p.location].filter(Boolean).join(' ') });
+    case 'meeting_today': return tr('오늘 회의: {when}', { when: [p.time, p.location].filter(Boolean).join(' ') || tr('시간 미정') });
+    case 'milestone_due': return p.days ? tr('마일스톤 D-{n}: {date}', { n: p.days, date: fmt(p.date) }) : tr('오늘이 마일스톤입니다: {date}', { date: fmt(p.date) });
+    case 'phase_due': return (p.days ? tr('제출일 D-{n}: {date}', { n: p.days, date: fmt(p.date) }) : tr('오늘이 제출일입니다: {date}', { date: fmt(p.date) }))
+      + ' · ' + tr('미완료 {n}건', { n: p.open || 0 }) + (p.review ? ' · ' + tr('검토 대기 {n}건', { n: p.review }) : '');
     default: return n.kind;
   }
 }
@@ -45,7 +54,8 @@ export default function Bell() {
   const go = n => {
     if (!n.read_at) read({ ids: [n.id] });
     setOpen(false);
-    if (n.project_id) nav(`/projects/${n.project_id}/${n.entity === 'issue' ? 'issues' : 'tasks'}?open=${n.entity_id}`);
+    if (n.project_id && n.entity === 'phase') nav(`/projects/${n.project_id}/board?phase=${n.entity_id}`);
+    else if (n.project_id) nav(`/projects/${n.project_id}/${n.entity === 'issue' ? 'issues' : 'tasks'}?open=${n.entity_id}`);
   };
   return (
     <div className="bell" ref={box}>

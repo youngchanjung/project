@@ -25,7 +25,7 @@ export const clearSession = res => res.clearCookie(COOKIE);
 export const publicUser = u => u && ({
   id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, active: !!u.active,
   department_id: u.department_id ?? null, employee_no: u.employee_no ?? null, position: u.position ?? null,
-  phone: u.phone ?? null, lang: u.lang ?? null, auth_provider: u.auth_provider || 'local', last_login_at: u.last_login_at ?? null
+  phone: u.phone ?? null, weekly_hours: u.weekly_hours ?? 40, external: !!u.external, lang: u.lang ?? null, auth_provider: u.auth_provider || 'local', last_login_at: u.last_login_at ?? null
 });
 
 export async function loadUser(req, _res, next) {
@@ -55,7 +55,8 @@ export async function projectRole(user, projectId) {
   if (!user) return null;
   if (user.role === 'admin') return 'pm';
   const m = await db('project_members').where({ project_id: projectId, user_id: user.id }).first();
+  if (user.external) return m ? m.role : null; // 외부 협력자는 참여 프로젝트만
   return m ? m.role : 'viewer';
 }
 const RANK = { viewer: 0, member: 1, pm: 2 };
-export const canEdit = (role, need = 'member') => RANK[role] >= RANK[need];
+export const canEdit = (role, need = 'member') => !!role && RANK[role] >= RANK[need];

@@ -2,17 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useProject, FilterBar } from '../pages/Project.jsx';
 import Dropdown, { DDCheck, DDRadio } from '../components/Dropdown.jsx';
-import { addD, diff, fmt, weekday, isPoint, downloadXLSX, taskCols } from '../util.js';
+import { addD, diff, fmt, fmtW, fmtY, dow, weekday, isPoint, downloadXLSX, taskCols } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
-const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--plan)', 보류: 'var(--hold)' };
+const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--bar-plan)', 보류: 'var(--hold)' };
+// 막대 안을 진행률만큼 진하게, 나머지는 연하게
+const barBg = t => { const c = COL[t.st]; const p = Math.max(0, Math.min(100, Number(t.progress) || 0)); return (t.st === '진행중' || t.st === '지연') && p > 0 && p < 100 ? `linear-gradient(90deg, ${c} ${p}%, color-mix(in srgb, ${c} 38%, var(--panel)) ${p}%)` : c; };
 const ST_ORDER = ['지연', '진행중', '예정', '보류', '완료'];
 // 왼쪽 표의 열 (작업명 다음). [키, 제목, 폭]
-const COLS = [['st', '상태', 88], ['start', '시작일', 114], ['end', '마감일', 114], ['owner', '담당', 110]];
-const RH = 32;
-const OPT0 = { cols: { st: true, start: true, end: true, owner: false }, base: true, deps: true, lbl: true, group: 'phase' };
+const COLS = [['st', '상태', 120], ['start', '시작일', 150], ['end', '마감일', 150], ['owner', '담당', 130], ['company', '업체', 140], ['float', '여유', 90]];
+const RH = 38;
+const OPT0 = { cols: { st: true, start: true, end: true, owner: false, company: false, float: false }, base: true, deps: true, lbl: true, crit: true, critOnly: false, group: 'phase' };
+const GROUPS = [['phase', '단계'], ['company', '업체'], ['trade', '공종'], ['owner', '담당'], ['state', '상태'], ['none', '없음']];
 function loadOpt() {
   try {
     const o = JSON.parse(localStorage.getItem('gantt-opt') || 'null');
@@ -22,9 +25,14 @@ function loadOpt() {
 }
 
 export default function Gantt() {
-  const { filtered: all, phases, holidays, td, color, openTask, tasks, deps, project, toast, can, reload } = useProject();
-  const raw = all.filter(t => !t.undated); // 날짜 없는 할 일은 칸반·할 일 목록에서만
+  const { filtered: all, phases, holidays, td, color, openTask, tasks, deps, project, toast, can, reload, bl, baseSel, setBaseSel, baselines, events } = useProject();
+  // 하위 작업(WBS): 요약 작업 id 집합과 접힌 요약 작업
+  const parentIds = new Set(tasks.map(t => t.parent_id).filter(Boolean));
+  const [wfold, setWfold] = useState(() => new Set());
+  const flipW = id => setWfold(f => { const n = new Set(f); n.has(id) ? n.delete(id) : n.add(id); return n; });
   const [opt, setOptS] = useState(loadOpt);
+  // 날짜 없는 할 일은 칸반·할 일 목록에서만. 'CP만 보기'면 크리티컬 작업만
+  const raw = all.filter(t => !t.undated && (!opt.critOnly || t.crit));
   const setOpt = patch => setOptS(o => { const n = { ...o, ...patch }; try { localStorage.setItem('gantt-opt', JSON.stringify(n)); } catch {} return n; });
   const showDeps = opt.deps, showBase = opt.base;
   const [folded, setFolded] = useState(() => new Set());
@@ -57,7 +65,7 @@ export default function Gantt() {
   min = addD(min, -((weekday(min) + 6) % 7) - 7); max = addD(max, 21);
   const days = diff(min, max), W = days * ppd, x = s => diff(min, s) * ppd;
   const beginDrag = (e, t, mode) => {
-    if (!editable || e.button !== 0) return;
+    if (!editable || e.button !== 0 || parentIds.has(t.id)) return;
     e.preventDefault(); e.stopPropagation();
     const g = { id: t.id, mode, x0: e.clientX, s0: t.start, e0: t.end, dd: 0, t };
     dragRef.current = g; setDrag(g);
@@ -84,44 +92,71 @@ export default function Gantt() {
   useEffect(() => { if (wrap.current) wrap.current.scrollLeft = Math.max(0, x(td) - 200); }, [zoom]); // eslint-disable-line
 
   const cols = COLS.filter(([k]) => opt.cols[k]);
-  const NAME_W = window.innerWidth < 1000 ? 200 : 320; // 좁은 화면에서는 작업명 칸을 줄임
+  const NAME_W = window.innerWidth < 1000 ? 230 : 360; // 좁은 화면에서는 작업명 칸을 줄임
   const LW = NAME_W + cols.reduce((a, c) => a + c[2], 0);
   const setZ = z => { setZoom(z); localStorage.setItem('gantt-zoom', z); };
 
-  // 묶음 (단계·담당·상태·없음)
-  const groups = opt.group === 'owner'
-    ? [...new Set(ts.map(t => t.owner || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(o => ({ id: o, name: o || tr('담당 없음'), dot: 'var(--muted)', has: t => (t.owner || '') === o }))
+  // 묶음 (단계·업체·공종·담당·상태·없음)
+  const byField = (f, none) => [...new Set(ts.map(t => t[f] || ''))].sort((a, b) => (a === '') - (b === '') || a.localeCompare(b)).map(o => ({ id: o, name: o || tr(none), dot: 'var(--muted)', has: t => (t[f] || '') === o }));
+  const groups = ['owner', 'company', 'trade'].includes(opt.group)
+    ? byField(opt.group, { owner: '담당 없음', company: '업체 없음', trade: '공종 없음' }[opt.group])
     : opt.group === 'state'
       ? ST_ORDER.map(st => ({ id: st, name: tr(st), dot: COL[st], has: t => t.st === st }))
       : opt.group === 'none'
         ? [{ id: 'all', name: tr('전체 작업'), dot: 'var(--accent)', has: () => true }]
         : [...phases.map(p => ({ id: p.id, name: p.name, dot: color(p.id), phase: p.id, has: t => t.phase_id === p.id })), { id: 0, name: tr('단계 없음'), dot: color(null), phase: null, has: t => !t.phase_id }];
   const gkey = g => `${opt.group}:${g.id}`;
-  const live = groups.map(g => ({ ...g, ts: ts.filter(g.has).sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end)) })).filter(g => g.ts.length);
+  const byStart = (a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end);
+  // 묶음 안에서 상위 작업 바로 아래에 하위 작업을 들여 씀. 접힌 요약 작업의 하위는 숨김
+  const depthOf = new Map();
+  const tree = list => {
+    const ids = new Set(list.map(t => t.id)), kids = new Map(), out = [];
+    for (const t of list) if (t.parent_id && ids.has(t.parent_id)) { if (!kids.has(t.parent_id)) kids.set(t.parent_id, []); kids.get(t.parent_id).push(t); }
+    const walk = (t, d) => { depthOf.set(t.id, d); out.push(t); if (wfold.has(t.id)) return; for (const c of (kids.get(t.id) || []).sort(byStart)) walk(c, d + 1); };
+    for (const t of list.filter(t => !t.parent_id || !ids.has(t.parent_id)).sort(byStart)) walk(t, 0);
+    return out;
+  };
+  const live = groups.map(g => ({ ...g, ts: tree(ts.filter(g.has)) })).filter(g => g.ts.length);
   const allFolded = live.length > 0 && live.every(g => folded.has(gkey(g)));
   const fold = g => setFolded(f => { const n = new Set(f); n.has(gkey(g)) ? n.delete(gkey(g)) : n.add(gkey(g)); return n; });
 
   const tools = (
     <>
-      <Dropdown label={`${tr('묶음')}: ${tr({ phase: '단계', owner: '담당', state: '상태', none: '없음' }[opt.group])}`} active={opt.group !== 'phase'}>
-        {close => [['phase', '단계'], ['owner', '담당'], ['state', '상태'], ['none', '없음']].map(([k, n]) => <DDRadio key={k} checked={opt.group === k} onClick={() => { setOpt({ group: k }); close(); }}>{tr(n)}</DDRadio>)}
+      <Dropdown label={`${tr('묶음')}: ${tr(Object.fromEntries(GROUPS)[opt.group] || '단계')}`} active={opt.group !== 'phase'}>
+        {close => GROUPS.map(([k, n]) => <DDRadio key={k} checked={opt.group === k} onClick={() => { setOpt({ group: k }); close(); }}>{tr(n)}</DDRadio>)}
       </Dropdown>
-      <Dropdown label={tr('표시')} active={!opt.cols.st || !opt.cols.start || !opt.cols.end || opt.cols.owner || !opt.base || !opt.deps || !opt.lbl}>
+      <button type="button" className={`tbtn ${opt.critOnly ? 'on' : ''}`} onClick={() => setOpt({ critOnly: !opt.critOnly })} title={tr('여유가 없어 늦어지면 전체 준공이 늦어지는 작업만 봅니다.')}>{opt.critOnly ? '✓ ' : ''}{tr('크리티컬 패스만')}</button>
+      <Dropdown label={`${tr('기준선')}: ${baseSel ? (baselines.find(b => b.id === baseSel)?.name || '') : tr('현재')}`} active={!!baseSel}>
+        {close => <>
+          <div className="dd-h">{tr('막대 아래 회색 막대로 비교할 기준선')}</div>
+          <DDRadio checked={!baseSel} onClick={() => { setBaseSel(0); close(); }}>{tr('현재 기준 일정')}</DDRadio>
+          {baselines.map(b => <DDRadio key={b.id} checked={baseSel === b.id} onClick={() => { setBaseSel(b.id); setOpt({ base: true }); close(); }}>{b.name} <span className="small">{fmtY(b.created_at.slice(0, 10))} · {b.count}{tr('건')}</span></DDRadio>)}
+          {can('pm') && !project.archived && <div className="dd-tools"><button className="btn sm primary" onClick={async () => {
+            const name = window.prompt(tr('새 기준선 이름 (예: 최초 계획, 1차 변경 승인)'), tr('기준선') + ' ' + (baselines.length + 1));
+            if (name == null) return;
+            try { const r = await api.post(`/projects/${project.id}/baselines`, { name }); toast(tr('기준선 ‘{name}’을 저장했습니다. ({n}건)', { name: r.name, n: r.count })); setBaseSel(0); close(); await reload(); }
+            catch (e) { toast(e.message); }
+          }}>{tr('+ 지금 일정을 기준선으로 저장')}</button></div>}
+        </>}
+      </Dropdown>
+      <Dropdown label={tr('표시')} active={!opt.cols.st || !opt.cols.start || !opt.cols.end || opt.cols.owner || opt.cols.company || opt.cols.float || !opt.base || !opt.deps || !opt.lbl || !opt.crit}>
         <div className="dd-h">{tr('왼쪽 표의 열')}</div>
         {COLS.map(([k, n]) => <DDCheck key={k} checked={opt.cols[k]} onChange={v => setOpt({ cols: { ...opt.cols, [k]: v } })}>{tr(n)}</DDCheck>)}
         <div className="dd-h">{tr('간트')}</div>
         <DDCheck checked={opt.base} onChange={v => setOpt({ base: v })}>{tr('기준 일정 표시')}</DDCheck>
+        <DDCheck checked={opt.crit} onChange={v => setOpt({ crit: v })}>{tr('크리티컬 패스 강조')}</DDCheck>
         <DDCheck checked={opt.deps} onChange={v => setOpt({ deps: v })}>{tr('선행관계 화살표')}</DDCheck>
         <DDCheck checked={opt.lbl} onChange={v => setOpt({ lbl: v })}>{tr('막대 옆 날짜')}</DDCheck>
       </Dropdown>
       <label className="tcheck"><input type="checkbox" checked={allFolded} onChange={e => setFolded(e.target.checked ? new Set(live.map(gkey)) : new Set())} /> {tr('모두 접기')}</label>
       <Dropdown label={tr('범례')}>
         <div className="legend col">
-          <span><i style={{ background: 'var(--plan)' }} />{tr('예정')}</span><span><i style={{ background: 'var(--prog)' }} />{tr('진행중')}</span>
+          <span><i style={{ background: 'var(--bar-plan)' }} />{tr('예정')}</span><span><i style={{ background: 'var(--prog)' }} />{tr('진행중')}</span>
           <span><i style={{ background: 'var(--late)' }} />{tr('지연')}</span><span><i style={{ background: 'var(--done)' }} />{tr('완료')}</span>
           <span><i style={{ background: 'var(--hold)' }} />{tr('보류')}</span><span>{tr('◆ 마일스톤·제출·지급')}</span>
           <span>{tr('→ 선행관계 (빨간색: 순서가 어긋남)')}</span>
           <span><i style={{ background: 'var(--muted)', height: 3, opacity: .45 }} />{tr('기준 일정')}</span>
+          <span><i style={{ background: 'transparent', outline: '2px solid var(--crit)' }} />{tr('크리티컬 패스 (여유 0일)')}</span>
           <span><i style={{ background: 'var(--wkend-strong)' }} />{tr('주말')}</span><span><i style={{ background: 'var(--hol)' }} />{tr('공휴일')}</span>
           <span><i style={{ background: 'var(--accent)', width: 2 }} />{tr('오늘')}</span>
         </div>
@@ -132,6 +167,7 @@ export default function Gantt() {
     <>
       <button className="tbtn accent" onClick={() => { if (wrap.current) wrap.current.scrollLeft = Math.max(0, x(td) - 200); }}>{tr('오늘')}</button>
       <div className="seg">{[['day', '일 단위'], ['week', '주 단위'], ['month', '월 단위']].map(([k, n]) => <button key={k} className={zoom === k ? 'on' : ''} onClick={() => setZ(k)}>{tr(n)}</button>)}</div>
+      <button className="tbtn" onClick={printA3} title={tr('A3 가로로 인쇄하거나 PDF로 저장합니다.')}>🖨 {tr('인쇄 · PDF')}</button>
       <ExportButton toast={toast} make={() => {
         const order = new Map(phases.map((p, i) => [p.id, i]));
         const rows = [...ts].sort((a, b) => ((order.get(a.phase_id) ?? 999) - (order.get(b.phase_id) ?? 999)) || a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
@@ -139,6 +175,13 @@ export default function Gantt() {
       }} />
     </>
   );
+  // A3 가로 인쇄: 인쇄용 클래스를 붙이고 브라우저 인쇄 창 (PDF로 저장 가능)
+  function printA3() {
+    document.body.classList.add('print-gantt');
+    const done = () => { document.body.classList.remove('print-gantt'); window.removeEventListener('afterprint', done); };
+    window.addEventListener('afterprint', done);
+    setTimeout(() => window.print(), 50);
+  }
   if (!ts.length) return <><FilterBar right={right}>{tools}</FilterBar><div className="empty">{tr('표시할 작업이 없습니다.')}</div></>;
 
   // 날짜 눈금·주말·공휴일
@@ -156,10 +199,20 @@ export default function Gantt() {
     if (hm.has(d)) bg.push(<div key={'h' + d} className="gbg" style={{ left: x(d), width: Math.max(ppd, 2), background: 'var(--hol)' }} title={hm.get(d)} />);
   }
   if (zoom !== 'day') scale.push(<div key="today" className="gtoday-tag" style={{ left: x(td) + ppd / 2 }}>{fmt(td)}</div>);
+  // 간트 머리 기간 표시 (우기·검측 주간 등): 머리 셋째 줄에 이름 띠, 본문에 옅은 배경
+  const evs = events.filter(e => e.end >= min && e.start <= max);
+  for (const e of evs) {
+    const l = x(e.start < min ? min : e.start), w = Math.max(ppd, (diff(e.start < min ? min : e.start, e.end > max ? max : e.end) + 1) * ppd);
+    scale.push(<div key={'ev' + e.id} className="gev" style={{ left: l, width: w, '--k': e.color }} title={`${e.name} ${fmt(e.start)}~${fmt(e.end)}`}>{e.name}</div>);
+    bg.push(<div key={'evb' + e.id} className="gbg" style={{ left: l, width: w, background: e.color, opacity: .1 }} />);
+  }
   const grid = zoom === 'month' ? null : { backgroundImage: 'linear-gradient(to right, var(--line) 1px, transparent 1px)', backgroundSize: `${zoom === 'day' ? ppd : 7 * ppd}px 100%` };
 
+  // 표의 날짜: 올해는 11/28 (토), 다른 해는 2027.1.4 (월)
+  const dshow = d => d.slice(0, 4) === td.slice(0, 4) ? fmtW(d) : `${d.slice(0, 4)}.${fmt(d).replace('/', '.')} (${dow(d)})`;
   const cell = (t, k) => k === 'st' ? <span className={`badge b-${t.st}`}><span className="bdot" />{tr(t.st)}</span>
-    : k === 'start' ? t.start : k === 'end' ? (isPoint(t) ? '' : t.end) : t.owner;
+    : k === 'start' ? dshow(t.start) : k === 'end' ? (isPoint(t) ? '' : dshow(t.end))
+    : k === 'float' ? (t.float == null ? '' : <span className={t.crit ? 'fcrit' : ''}>{t.float}{tr('일')}</span>) : t[k];
   const rows = [], rowOf = new Map();
   for (const g of live) {
     const gt = g.ts, isF = folded.has(gkey(g));
@@ -174,21 +227,27 @@ export default function Gantt() {
     for (const t of gt) {
       rowOf.set(t.id, rows.length);
       const pt = isPoint(t), lbl = zoom === 'month' || !opt.lbl ? '' : `${fmt(t.start)}${t.end !== t.start ? '~' + fmt(t.end) : ''}`;
-      const base = showBase && t.baseline_end && (t.baseline_end !== t.end || (t.baseline_start && t.baseline_start !== t.start));
+      const b = bl(t), base = showBase && b && (b.end !== t.end || b.start !== t.start);
+      const slip = b && t.end > b.end ? diff(b.end, t.end) : 0, crit = opt.crit && t.crit;
+      const isSum = parentIds.has(t.id), dep = depthOf.get(t.id) || 0, over = t.deadline && t.end > t.deadline;
       rows.push(
-        <div key={t.id} className="grow">
+        <div key={t.id} className={`grow ${t.st === '지연' ? 'late' : ''}`}>
           <div className={`glabel gcells ${t.st === '완료' ? 'done' : ''}`} style={{ width: LW }} onClick={() => openTask(t.id)} title={t.name}>
-            <div className="gc name" style={{ width: NAME_W }}><span className="small">{t.code}</span> {t.is_key ? '★' : ''}<Tx>{t.name}</Tx></div>
+            <div className={`gc name ${isSum ? 'gsumname' : ''}`} style={{ width: NAME_W, paddingLeft: 8 + dep * 18 }}>
+              {isSum && <span className="gtog" onClick={e => { e.stopPropagation(); flipW(t.id); }} title={tr(wfold.has(t.id) ? '펼치기' : '접기')}>{wfold.has(t.id) ? '+' : '−'}</span>}
+              {t.st === '완료' && <span className="gdone">✓</span>}<span className="small">{t.code}</span> {t.is_key ? '★' : ''}<Tx>{t.name}</Tx>{over && <span className="slip" title={tr('종료일이 마감 기한보다 {n}일 늦습니다.', { n: diff(t.deadline, t.end) })}> ⚠</span>}</div>
             {cols.map(([k, , w]) => <div key={k} className={`gc ${k}`} style={{ width: w }}>{cell(t, k)}</div>)}
           </div>
           <div className="gbody" style={{ width: W }}>
-            {base && <div className="gbase" style={{ left: x(t.baseline_start || t.baseline_end), width: Math.max(3, (diff(t.baseline_start || t.baseline_end, t.baseline_end) + 1) * ppd) }} title={`${tr('기준 일정')} ${t.baseline_start || ''} ~ ${t.baseline_end}`} />}
-            {pt
-              ? <div className={`gms ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start) + ppd / 2 - 6, background: COL[t.st] }} title={`${t.name} (${t.start})`} />
-              : <div className={`gbar ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start), width: (diff(t.start, t.end) + 1) * ppd, background: COL[t.st] }} title={`${t.name} (${t.start} ~ ${t.end})${editable ? '\n' + tr('끌어서 옮기고, 양 끝을 끌어 기간을 바꿉니다. 누르면 편집 창이 열립니다.') : ''}`}>
+            {base && <div className="gbase" style={{ left: x(b.start), width: Math.max(3, (diff(b.start, b.end) + 1) * ppd) }} title={`${tr('기준 일정')} ${b.start} ~ ${b.end}`} />}
+            {t.deadline && <div className={`gdl ${over ? 'over' : ''}`} style={{ left: x(t.deadline) + ppd / 2 - 6 }} title={`${tr('마감 기한')} ${t.deadline}`} />}
+            {isSum ? <div className={`gwbs ${crit ? 'crit' : ''}`} onClick={() => openTask(t.id)} style={{ left: x(t.start), width: (diff(t.start, t.end) + 1) * ppd }} title={`${t.name} (${t.start} ~ ${t.end}) · ${t.progress || 0}%`}><i style={{ width: `${t.progress || 0}%` }} /></div>
+            : pt
+              ? <div className={`gms ${crit ? 'crit' : ''} ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start) + ppd / 2 - 6, background: COL[t.st] }} title={`${t.name} (${t.start})`} />
+              : <div className={`gbar ${crit ? 'crit' : ''} ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start), width: (diff(t.start, t.end) + 1) * ppd, background: barBg(t) }} title={`${t.name} (${t.start} ~ ${t.end})${t.progress ? ` · ${t.progress}%` : ''}${t.float != null ? ` · ${tr('여유')} ${t.float}${tr('일')}${t.crit ? ' (CP)' : ''}` : ''}${editable ? '\n' + tr('끌어서 옮기고, 양 끝을 끌어 기간을 바꿉니다. 누르면 편집 창이 열립니다.') : ''}`}>
                 {editable && <><i className="gh l" onPointerDown={e => beginDrag(e, t, 'start')} /><i className="gh r" onPointerDown={e => beginDrag(e, t, 'end')} /></>}
               </div>}
-            <span className="glbl" style={{ left: (pt ? x(t.start) + ppd / 2 + 12 : x(t.end) + ppd + 6) }}>{lbl}{t.end > (t.baseline_end || t.end) ? <b style={{ color: 'var(--late)' }}> +{diff(t.baseline_end, t.end)}{tr('일')}</b> : null}</span>
+            <span className="glbl" style={{ left: (pt ? x(t.start) + ppd / 2 + 12 : x(t.end) + ppd + 6) }}>{lbl}{slip > 0 ? <b style={{ color: 'var(--late)' }}> +{slip}{tr('일')}</b> : null}</span>
           </div>
         </div>
       );
@@ -230,7 +289,7 @@ export default function Gantt() {
               <div className="gc name" style={{ width: NAME_W }}>{tr('작업명')}</div>
               {cols.map(([k, n, w]) => <div key={k} className="gc" style={{ width: w }}>{tr(n)}</div>)}
             </div>
-            <div className="gscale" style={{ width: W }}>{scale}</div>
+            <div className="gscale" style={{ width: W, height: evs.length ? 84 : undefined }}>{scale}</div>
           </div>
           <div style={{ position: 'relative' }}>
             <div style={{ position: 'absolute', left: LW, top: 0, bottom: 0, width: W, pointerEvents: 'none' }}>

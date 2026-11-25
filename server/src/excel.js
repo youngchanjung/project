@@ -137,8 +137,10 @@ export function parseWorkbooks(buffers) {
         const code = s(r['ID']);
         out.tasks.push({
           code: code || null, phase: s(r['단계']) ? phase(s(r['단계'])) : null, name: s(r['작업명']), name_en: s(r['작업명(영문)']) || null,
-          type: mapType(r['유형']), owner: s(r['담당']) || null, start, end: iso(r['종료']) || start,
+          type: mapType(r['유형']), owner: s(r['담당']) || null, company: '업체' in r ? s(r['업체']) || null : undefined, trade: '공종' in r ? s(r['공종']) || null : undefined, start, end: iso(r['종료']) || start,
           baseline_end: iso(r['기준 종료']), actual_end: iso(r['실제 완료']), not_before: iso(r['최초 가능일']),
+          ...('마감일' in r ? { deadline: iso(r['마감일']) } : {}), ...('실제 시작' in r ? { actual_start: iso(r['실제 시작']) } : {}), ...('공정 가중치' in r ? { weight: Number(r['공정 가중치']) || null } : {}),
+          ...('상위 ID' in r ? { parentCode: s(r['상위 ID']) || null } : {}),
           status: mapTaskStatus(r['상태']), is_key: s(r['핵심']) === '★' || s(r['핵심']) === 'Y', ref: s(r['계약 조항']) || null, note: s(r['비고']) || null
         });
         for (const part of s(r['선행작업']).split(/[,;]\s*/).filter(Boolean)) {
@@ -170,8 +172,8 @@ export function buildExport({ project, phases, tasks, deps, issues, users }) {
     .map(d => `${code.get(d.pred_id)}${d.kind !== 'FS' ? ' ' + d.kind : ''}${d.lag ? (d.lag > 0 ? ' +' : ' ') + d.lag : ''}`).join(', ');
   const taskRows = tasks.map(t => ({
     ID: t.code || `#${t.id}`, 단계: phaseName.get(t.phase_id) || '', 작업명: t.name, '작업명(영문)': t.name_en || '', 유형: t.type,
-    담당: t.owner || '', '담당자(계정)': uname.get(t.assignee_id) || '', 시작: t.start, 종료: t.end, 상태: t.status, '진행률(%)': t.progress,
-    핵심: t.is_key ? '★' : '', 선행작업: predStr(t.id), '최초 가능일': t.not_before || '', '기준 종료': t.baseline_end || '', '실제 완료': t.actual_end || '',
+    담당: t.owner || '', '담당자(계정)': uname.get(t.assignee_id) || '', 업체: t.company || '', 공종: t.trade || '', 시작: t.start, 종료: t.end, 상태: t.status, '진행률(%)': t.progress,
+    핵심: t.is_key ? '★' : '', 선행작업: predStr(t.id), '상위 ID': t.parent_id ? code.get(t.parent_id) || '' : '', '최초 가능일': t.not_before || '', 마감일: t.deadline || '', '기준 종료': t.baseline_end || '', '실제 시작': t.actual_start || '', '실제 완료': t.actual_end || '', '공정 가중치': t.weight ?? '',
     '계약 조항': t.ref || '', 비고: t.note || ''
   }));
   const issueRows = issues.map(i => ({

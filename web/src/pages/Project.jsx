@@ -1,3 +1,4 @@
+import { setDateHolidays } from '../components/DateInput.jsx';
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { NavLink, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
@@ -5,6 +6,7 @@ import { useApp, rememberProject } from '../App.jsx';
 import Dropdown from '../components/Dropdown.jsx';
 import { today, stateOf, phaseColor, ROLE_NAME, PALETTE, catOf } from '../util.js';
 import Board from '../views/Board.jsx';
+import Schedule from '../views/Schedule.jsx';
 import Dashboard from '../views/Dashboard.jsx';
 import Gantt from '../views/Gantt.jsx';
 import Calendar from '../views/Calendar.jsx';
@@ -12,6 +14,12 @@ import TaskList from '../views/TaskList.jsx';
 import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
 import Meetings from '../views/Meetings.jsx';
+import Lookahead from '../views/Lookahead.jsx';
+import Workload from '../views/Workload.jsx';
+import Plan from '../views/Plan.jsx';
+import Progress from '../views/Progress.jsx';
+import SCurve from '../views/SCurve.jsx';
+import Photos from '../views/Photos.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
 import { tr } from '../i18n.js';
@@ -23,16 +31,25 @@ const RANK = { viewer: 0, member: 1, pm: 2 };
 
 export default function Project() {
   const { id } = useParams();
-  const { toast } = useApp();
+  const { toast, user } = useApp();
   const [data, setData] = useState(null);
   const [err, setErr] = useState(null);
   const [modal, setModal] = useState(null); // {kind:'task'|'issue', id|null, preset}
   const [filter, setFilter] = useState({ off: [], q: '', hideDone: false });
   const [sp, setSp] = useSearchParams();
+  // 비교할 기준선: 0 = 현재 기준 일정(작업의 기준 시작·종료), 숫자 = 저장한 기준선 버전
+  const [baseSel, setBaseSel] = useState(0);
+  const [baseRows, setBaseRows] = useState(null);
   const td = today();
 
   const reload = useCallback(() => api.get(`/projects/${id}/data`).then(setData).catch(e => setErr(e.message)), [id]);
-  useEffect(() => { setData(null); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
+  useEffect(() => { setData(null); setBaseSel(0); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
+  useEffect(() => {
+    if (!baseSel) { setBaseRows(null); return; }
+    api.get(`/projects/${id}/baselines/${baseSel}`).then(b => setBaseRows(new Map(b.rows.map(r => [r.task_id, r])))).catch(() => { setBaseSel(0); setBaseRows(null); });
+  }, [id, baseSel]);
+  // 날짜 달력에 이 프로젝트의 공휴일 표시
+  useEffect(() => { setDateHolidays(data?.holidays || null); return () => setDateHolidays(null); }, [data?.holidays]);
   // ?open=ID 로 들어오면 해당 작업/이슈 열기 (홈 화면 링크)
   useEffect(() => {
     const open = sp.get('open');
@@ -47,7 +64,7 @@ export default function Project() {
     const q = filter.q.trim().toLowerCase();
     return tasks.filter(t => !filter.off.includes(t.phase_id ?? 0))
       .filter(t => !filter.hideDone || t.st !== '완료')
-      .filter(t => !q || [t.code, t.name, t.name_en, t.owner, t.note, t.type].join(' ').toLowerCase().includes(q));
+      .filter(t => !q || [t.code, t.name, t.name_en, t.owner, t.company, t.trade, t.note, t.type].join(' ').toLowerCase().includes(q));
   }, [tasks, filter]);
 
   if (err) return <main className="page"><div className="err">{err}</div></main>;
@@ -58,6 +75,12 @@ export default function Project() {
   const color = pid => phaseColor(data.phases, pid);
   const ctx = {
     ...data, tasks, filtered, filter, setFilter, reload, role, can, color, td, toast,
+    baseSel, setBaseSel, baselines: data.baselines || [], events: data.events || [],
+    // 이 작업의 기준선 {start, end} (없으면 null)
+    bl: t => {
+      if (baseSel) { const r = baseRows?.get(t.id); return r ? { start: r.start, end: r.end } : null; }
+      return t.baseline_end ? { start: t.baseline_start || t.baseline_end, end: t.baseline_end } : null;
+    },
     openTask: (taskId, preset) => setModal({ kind: 'task', id: taskId ?? null, preset }),
     openIssue: (issueId, preset) => setModal({ kind: 'issue', id: issueId ?? null, preset }),
     // 저장 결과로 자동 조정된 작업이 있으면 알림
@@ -67,10 +90,12 @@ export default function Project() {
   const cat = catOf(p.category);
   const isCons = cat.key === 'construction';
   const NAMES = {
-    dashboard: tr('대시보드'), gantt: tr('간트'), calendar: tr(cat.key === 'research' ? '일정' : '달력'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
-    board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
+    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), progress: tr('진척 입력'), scurve: tr('공정률'), photos: tr('현장 사진'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    board: tr('칸반'), workload: tr('업무량'), plan: tr('배치 달력'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
-  const tabs = cat.tabs.map(k => [k, NAMES[k]]);
+  // 외부 협력자: 자기 카드 관련 화면만
+  const EXT_TABS = ['board', 'tasks', 'calendar', 'gantt', 'workload'];
+  const tabs = cat.tabs.filter(k => !user.external || EXT_TABS.includes(k)).map(k => [k, NAMES[k]]);
 
   return (
     <Ctx.Provider value={ctx}>
@@ -82,8 +107,9 @@ export default function Project() {
             <span className="small">{[p.code, p.client, `${tr('내 역할')}: ${tr(ROLE_NAME[role])}`, tr(p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준')].filter(Boolean).join(' · ')}</span>
           </div>
           <div className="sp" />
-          {can() && <button className="btn" onClick={() => ctx.openIssue(null)}>{tr('+ 이슈')}</button>}
-          {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr(isCons ? '+ 작업' : '+ 할 일')}</button>}
+          {user.external && <span className="badge b-보류" title={tr('참여 프로젝트에서 내가 맡은 카드만 보입니다.')}>{tr('외부 협력자')}</span>}
+          {can() && !user.external && <button className="btn" onClick={() => ctx.openIssue(null)}>{tr('+ 이슈')}</button>}
+          {can() && !user.external && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr(isCons ? '+ 작업' : '+ 할 일')}</button>}
         </div>
         <nav className="tabs">
           {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}/${k}`} end={k !== 'meetings'} className="tab">{n}</NavLink>)}
@@ -92,7 +118,14 @@ export default function Project() {
           <Route index element={<Navigate to={`/projects/${id}/${cat.view}${location.search}`} replace />} />
           <Route path="dashboard" element={<><FilterBar /><Dashboard /></>} />
           <Route path="board" element={<Board />} />
+          <Route path="workload" element={<Workload />} />
+          <Route path="plan" element={<Plan />} />
+          <Route path="schedule" element={<Schedule />} />
           <Route path="gantt" element={<Gantt />} />
+          <Route path="lookahead" element={<Lookahead />} />
+          <Route path="progress" element={<Progress />} />
+          <Route path="scurve" element={<SCurve />} />
+          <Route path="photos" element={<Photos />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />

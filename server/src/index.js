@@ -17,8 +17,11 @@ import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
 import { backupRouter } from './routes/backup.js';
 import { projectsRouter } from './routes/projects.js';
+import { workloadRouter } from './routes/workload.js';
+import { timeRouter, leavesRouter } from './routes/design.js';
 import { tasksRouter, depsRouter } from './routes/tasks.js';
 import { issuesRouter } from './routes/issues.js';
+import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
 
@@ -31,6 +34,17 @@ export function createApp() {
 
   const api = express.Router();
   api.get('/health', (_req, res) => res.json({ ok: true }));
+  // 외부 협력자: 참여 프로젝트의 자기 카드·시간·휴가·알림만 (이슈·회의록·엑셀·관리 등은 막음)
+  api.use((req, res, next) => {
+    if (!req.user?.external) return next();
+    const p = req.path;
+    const ok = /^\/(auth|me|notifications|holidays|translate|workload|leaves)(\/|$)/.test(p)
+      || (req.method === 'GET' && /^\/users\/?$/.test(p))
+      || (req.method === 'GET' && /^\/projects\/?$/.test(p))
+      || /^\/projects\/\d+\/(data|tasks|time)(\/|$)/.test(p);
+    if (!ok) return res.status(403).json({ error: '외부 협력자 계정은 이 기능을 쓸 수 없습니다.' });
+    next();
+  });
   api.use('/auth', authRouter);
   api.use('/users', usersRouter);
   api.use('/departments', departmentsRouter);
@@ -41,10 +55,14 @@ export function createApp() {
   api.use('/notifications', notificationsRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
+  api.use('/workload', workloadRouter);
+  api.use('/leaves', leavesRouter);
+  api.use('/projects/:pid/time', timeRouter);
   api.use('/projects', projectsRouter);
   api.use('/projects/:pid/tasks', tasksRouter);
   api.use('/projects/:pid/deps', depsRouter);
   api.use('/projects/:pid/issues', issuesRouter);
+  api.use('/projects/:pid/attachments', attachmentsRouter);
   api.use('/meetings', meetingStatusRouter);
   api.use('/projects/:pid/meetings', meetingsRouter);
   api.use('/projects/:pid/import', importRouter);

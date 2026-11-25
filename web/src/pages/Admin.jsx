@@ -6,6 +6,7 @@ import { fmtY, dow, downloadXLSX } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { COUNTRIES } from '../countries.js';
 import { tr } from '../i18n.js';
+import DateInput from '../components/DateInput.jsx';
 
 export default function Admin() {
   const [depts, setDepts] = useState([]);
@@ -65,7 +66,7 @@ function Users({ depts, onDeptsChanged }) {
         <table><thead><tr><th>{tr('이름')}</th><th>{tr('아이디')}</th><th>{tr('사번')}</th><th>{tr('부서')}</th><th>{tr('직급')}</th><th>{tr('메일')}</th><th>{tr('권한')}</th><th>{tr('최근 로그인')}</th><th /></tr></thead>
           <tbody>{shown.map(u => (
             <tr key={u.id} style={u.active ? undefined : { opacity: .5 }}>
-              <td className="nw">{u.name}</td><td>{u.username}</td><td className="small">{u.employee_no}</td>
+              <td className="nw">{u.name}{u.external && <span className="badge b-보류" style={{ marginLeft: 6 }}>{tr('외부')}</span>}</td><td>{u.username}</td><td className="small">{u.employee_no}</td>
               <td className="nw">{dn.get(u.department_id) || <span className="small">-</span>}</td><td className="nw">{u.position}</td>
               <td className="small">{u.email}</td>
               <td className="nw">{tr(u.role === 'admin' ? '관리자' : '일반')}{!u.active && ` (${tr('사용 중지')})`}</td>
@@ -88,7 +89,7 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
   const isNew = !u.id;
   const [f, setF] = useState({
     username: u.username || '', name: u.name || '', email: u.email || '', role: u.role || 'user', active: u.active ?? true, password: '',
-    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || ''
+    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || '', weekly_hours: u.weekly_hours ?? 40, external: !!u.external
   });
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
@@ -114,6 +115,8 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
         <label>{tr('직급·직책')}</label><input type="text" value={f.position} onChange={set('position')} placeholder={tr('예: 책임연구원, 팀장')} />
         <label>{tr('회사 메일')}</label><input type="email" value={f.email} onChange={set('email')} placeholder={tr('M365 로그인 연결에 사용')} />
         <label>{tr('전화')}</label><input type="text" value={f.phone} onChange={set('phone')} />
+        <label>{tr('주당 근무 시간')}</label><div className="row"><input type="number" min="0" max="80" step="1" value={f.weekly_hours} onChange={set('weekly_hours')} style={{ width: 90 }} /><span className="small">{tr('업무량 화면의 기준 (기본 40, 시간제는 줄여서)')}</span></div>
+        <label>{tr('외부 협력자')}</label><label className="small"><input type="checkbox" checked={f.external} onChange={set('external')} disabled={u.id === me.id} /> {tr('참여 프로젝트에서 자기 카드만 보고 고칠 수 있음 (이슈·회의록·엑셀 등은 막힘)')}</label>
         <label>{tr('권한')}</label><select value={f.role} onChange={set('role')} disabled={u.id === me.id}><option value="user">{tr('일반')}</option><option value="admin">{tr('관리자')}</option></select>
         <label>{tr(isNew ? '초기 비밀번호' : '비밀번호 재설정')}</label><input type="password" value={f.password} onChange={set('password')} placeholder={tr(isNew ? '8자 이상' : '바꿀 때만 입력')} />
         {!isNew && <><label>{tr('사용')}</label><label className="small"><input type="checkbox" checked={f.active} onChange={set('active')} disabled={u.id === me.id} /> {tr('로그인 허용 (퇴사 시 해제)')}</label></>}
@@ -283,7 +286,7 @@ function Holidays() {
         <ExportButton toast={toast} make={() => downloadXLSX(`공휴일_${country}${year ? '_' + year : ''}`, [{ name: `${country} ${year || ''}`.trim(), rows: shown, cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']] }])} />
       </div>
       {err && <div className="err">{err}</div>}
-      <div className="toolbar"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /><input type="text" placeholder={tr('이름')} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><button className="btn primary" onClick={add}>{tr('추가')}</button>
+      <div className="toolbar"><DateInput value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /><input type="text" placeholder={tr('이름')} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><button className="btn primary" onClick={add}>{tr('추가')}</button>
         <button className="btn" onClick={() => setBulk(bulk === null ? '' : null)}>{tr('여러 날 붙여넣기')}</button></div>
       {bulk !== null && <div style={{ marginBottom: 12 }}>
         <textarea value={bulk} onChange={e => setBulk(e.target.value)} placeholder={tr('한 줄에 하루씩: 날짜 이름') + '\n2027-01-01 …\n2027-02-05 …\n' + tr('(엑셀에서 날짜·이름 두 칸을 복사해 붙여 넣어도 됩니다)')} style={{ minHeight: 120 }} />

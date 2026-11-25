@@ -59,7 +59,10 @@ export function wouldCycle(deps, predId, succId) {
  * 완료된 작업은 옮기지 않고, 최초 가능일(not_before)보다 앞당기지 않습니다.
  * @returns {Array<{id,start,end}>} 날짜가 바뀐 작업
  */
-export function recalc(tasks, deps, hol) {
+export function recalc(tasks0, deps, hol) {
+  // 하위 작업이 있는 요약 작업은 하위 작업에서 날짜를 모으므로 선행관계 계산에서 뺌
+  const parents = new Set(tasks0.map(t => t.parent_id).filter(Boolean));
+  const tasks = tasks0.filter(t => !parents.has(t.id));
   const byId = new Map(tasks.map(t => [t.id, { ...t }]));
   const preds = new Map(), indeg = new Map(tasks.map(t => [t.id, 0])), out = new Map();
   for (const d of deps) {
@@ -108,6 +111,140 @@ export function recalc(tasks, deps, hol) {
     }
   }
   return changed;
+}
+
+/**
+ * 크리티컬 패스(CPM 역방향 계산): 현재 날짜를 빠른 일정으로 보고, 선행관계를 거꾸로 따라가
+ * 각 작업이 프로젝트 종료일을 늦추지 않고 밀릴 수 있는 여유(근무일)를 구합니다.
+ *  FS: 선행 늦은 종료 ≤ 후행 늦은 시작 - 1 - lag
+ *  SS: 선행 늦은 시작 ≤ 후행 늦은 시작 - lag
+ *  FF: 선행 늦은 종료 ≤ 후행 늦은 종료 - lag
+ * 완료·날짜 없는 작업은 제외. 여유가 0 이하면 크리티컬.
+ * @returns {Map<id, {float:number, crit:boolean}>}
+ */
+export function criticalPath(tasks, deps, hol) {
+  const parents = new Set(tasks.map(t => t.parent_id).filter(Boolean));
+  const live = tasks.filter(t => !parents.has(t.id) && !t.undated && t.status !== '완료' && !t.actual_end && t.start && t.end);
+  const res = new Map();
+  if (!live.length) return res;
+  let min = live[0].start, max = live[0].end;
+  for (const t of live) { if (t.start < min) min = t.start; if (t.end > max) max = t.end; }
+  // 근무일 누적 수: cum(d) = min~d 사이 근무일 수
+  const cumMap = new Map(); let c = 0;
+  for (let d = min; d <= max; d = addDays(d, 1)) { if (isWorkday(d, hol)) c++; cumMap.set(d, c); }
+  const cum = d => cumMap.get(d) ?? 0;
+  const node = new Map();
+  for (const t of live) {
+    const es = (t.start === min ? 0 : cum(addDays(t.start, -1))) + 1;
+    const ef = Math.max(es, cum(t.end));
+    node.set(t.id, { es, ef, dur: ef - es + 1 });
+  }
+  const succ = new Map(), outdeg = new Map([...node.keys()].map(id => [id, 0])), preds = new Map();
+  for (const d of deps) {
+    if (!node.has(d.pred_id) || !node.has(d.succ_id)) continue;
+    if (!succ.has(d.pred_id)) succ.set(d.pred_id, []);
+    succ.get(d.pred_id).push(d);
+    if (!preds.has(d.succ_id)) preds.set(d.succ_id, []);
+    preds.get(d.succ_id).push(d.pred_id);
+    outdeg.set(d.pred_id, outdeg.get(d.pred_id) + 1);
+  }
+  let end = 0; for (const n of node.values()) if (n.ef > end) end = n.ef;
+  const queue = [...node.keys()].filter(id => outdeg.get(id) === 0);
+  while (queue.length) {
+    const id = queue.shift(), n = node.get(id);
+    let lf = end;
+    for (const d of succ.get(id) || []) {
+      const s = node.get(d.succ_id), lag = Number(d.lag) || 0;
+      const v = d.kind === 'SS' ? s.ls - lag + n.dur - 1 : d.kind === 'FF' ? s.lf - lag : s.ls - 1 - lag;
+      if (v < lf) lf = v;
+    }
+    n.lf = lf; n.ls = lf - n.dur + 1;
+    res.set(id, { float: lf - n.ef, crit: lf - n.ef <= 0 });
+    for (const p of preds.get(id) || []) { outdeg.set(p, outdeg.get(p) - 1); if (outdeg.get(p) === 0) queue.push(p); }
+  }
+  return res;
+}
+
+/**
+ * 요약 작업(하위 작업이 있는 작업)의 시작·종료·진행률을 하위 작업에서 모읍니다. 여러 단계도 아래에서부터.
+ * 진행률은 기간(일)으로 가중 평균. 하위가 모두 완료면 요약도 완료.
+ * @returns {Array<{id,start,end,progress,status}>} 바뀐 요약 작업
+ */
+export function rollup(tasks) {
+  const byId = new Map(tasks.map(t => [t.id, { ...t }]));
+  const kids = new Map();
+  for (const t of byId.values()) if (t.parent_id && byId.has(t.parent_id)) { if (!kids.has(t.parent_id)) kids.set(t.parent_id, []); kids.get(t.parent_id).push(t); }
+  const depth = id => { let d = 0, x = byId.get(id), g = 0; while (x?.parent_id && byId.has(x.parent_id) && g++ < 50) { d++; x = byId.get(x.parent_id); } return d; };
+  const order = [...kids.keys()].sort((a, b) => depth(b) - depth(a));
+  const changed = [];
+  for (const id of order) {
+    const p = byId.get(id), cs = kids.get(id).filter(c => !c.undated);
+    if (!cs.length) continue;
+    let start = cs[0].start, end = cs[0].end, w = 0, sum = 0;
+    for (const c of cs) {
+      if (c.start < start) start = c.start; if (c.end > end) end = c.end;
+      const d = diffDays(c.start, c.end) + 1; w += d; sum += d * (c.status === '완료' ? 100 : Number(c.progress) || 0);
+    }
+    const progress = Math.round(sum / w);
+    const allDone = cs.every(c => c.status === '완료');
+    const status = allDone ? '완료' : cs.some(c => c.status === '진행중' || c.status === '완료' || Number(c.progress) > 0) ? '진행중' : (p.status === '완료' ? '미착수' : p.status);
+    if (start !== p.start || end !== p.end || progress !== p.progress || status !== p.status || p.undated) {
+      Object.assign(p, { start, end, progress, status, undated: false });
+      changed.push({ id, start, end, progress, status });
+    }
+  }
+  return changed;
+}
+
+/**
+ * 공정률·S-커브. 요약 작업(하위가 있는 작업)·날짜 없는 작업은 빼고 실제 작업만 씀.
+ * - 가중치: mode 'weight' 이면 작업의 weight(공사비 등), 아니면 기간(일)
+ * - 계획: plan(Map id→{start,end}, 기준선) 이 있으면 그 날짜, 없으면 기준 시작·종료, 그것도 없으면 현재 일정.
+ *   기간 안에서는 날짜에 비례해 0→100%
+ * - 실적: 실제 시작일(없으면 시작일)부터 실제 완료일(없으면 오늘)까지 현재 진행률까지 고르게 올라간 것으로 봄
+ * @returns {{mode, total, points:[{date,plan,actual}], today:{date,plan,actual}, start, end, count}}
+ */
+export function sCurve(tasks, { today, plan = null, mode = 'duration', step = 7 } = {}) {
+  const parents = new Set(tasks.map(t => t.parent_id).filter(Boolean));
+  const rows = [];
+  for (const t of tasks) {
+    if (t.undated || parents.has(t.id) || !t.start || !t.end) continue;
+    const b = plan?.get(t.id);
+    const ps = b?.start || t.baseline_start || t.start, pe = b?.end || t.baseline_end || t.end;
+    const w = mode === 'weight' ? Math.max(0, Number(t.weight) || 0) : diffDays(t.start, t.end) + 1;
+    if (!(w > 0)) continue;
+    const done = t.status === '완료' || !!t.actual_end;
+    const p = done ? 1 : Math.min(1, Math.max(0, (Number(t.progress) || 0) / 100));
+    const as = t.actual_start || (p > 0 ? t.start : null);
+    const ae = t.actual_end || (done ? t.end : today);
+    rows.push({ w, ps, pe: pe < ps ? ps : pe, p, as: as && as <= today ? as : (p > 0 ? today : null), ae: ae > today ? today : ae });
+  }
+  const total = rows.reduce((a, r) => a + r.w, 0);
+  if (!rows.length) return { mode, total: 0, points: [], today: { date: today, plan: 0, actual: 0 }, start: null, end: null, count: 0 };
+  const frac = (d, s, e) => (d < s ? 0 : d >= e ? 1 : (diffDays(s, d) + 1) / (diffDays(s, e) + 1));
+  const planAt = d => rows.reduce((a, r) => a + r.w * frac(d, r.ps, r.pe), 0) / total * 100;
+  const actAt = d => rows.reduce((a, r) => {
+    if (!r.as || !r.p) return a;
+    const e = r.ae < r.as ? r.as : r.ae;
+    return a + r.w * r.p * frac(d, r.as, e);
+  }, 0) / total * 100;
+  let start = rows[0].ps, end = rows[0].pe;
+  for (const r of rows) { if (r.ps < start) start = r.ps; if (r.as && r.as < start) start = r.as; if (r.pe > end) end = r.pe; }
+  if (today > end) end = today;
+  const r1 = v => Math.round(v * 10) / 10;
+  const points = [];
+  for (let d = addDays(start, -1); ; d = addDays(d, step)) {
+    const last = d >= end;
+    const x = last ? end : d;
+    points.push({ date: x, plan: r1(planAt(x)), actual: x <= today ? r1(actAt(x)) : null });
+    if (last) break;
+  }
+  // 오늘 점을 끼워 넣음
+  if (today >= start && today <= end && !points.some(p => p.date === today)) {
+    points.push({ date: today, plan: r1(planAt(today)), actual: r1(actAt(today)) });
+    points.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  return { mode, total, points, today: { date: today, plan: r1(planAt(today)), actual: r1(actAt(today)) }, start, end, count: rows.length };
 }
 
 // 오늘 기준 작업 상태(화면 표시용)
