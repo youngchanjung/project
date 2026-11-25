@@ -450,8 +450,57 @@ const migrations = [
         }
       }
     }
+  },
+  {
+    // 연구·시공 기본 템플릿 (설계는 013 에서 넣음). 같은 이름이 이미 있으면 넣지 않음
+    name: '017_builtin_templates',
+    async up(k) {
+      for (const [name, category, data] of [['연구 과제 기본', 'research', BUILTIN_RESEARCH_TEMPLATE], ['시공 공정 기본', 'construction', BUILTIN_CONSTRUCTION_TEMPLATE]]) {
+        if (!(await k('project_templates').where({ name, category }).first())) {
+          await k('project_templates').insert({ name, category, data: JSON.stringify(data), created_at: new Date().toISOString() });
+        }
+      }
+    }
   }
 ];
+
+// 연구 과제 예시: 연차별 연구 흐름. 보고·평가 마일스톤은 '예시 일정 넣기'(협약 기간 기준 날짜)로 따로 들어감
+export const BUILTIN_RESEARCH_TEMPLATE = {
+  phases: [{ name: '1차년도', color: '#2f6fde' }, { name: '2차년도', color: '#8e5bd8' }],
+  tasks: [
+    { name: '연구 계획서 확정', phase: 0, checklist: ['연구 목표·범위', '연차별 목표', '참여 연구원 역할'] },
+    { name: '선행 연구·문헌 조사', phase: 0, tags: '조사' },
+    { name: '시험 계획 수립', phase: 0, checklist: ['시험 항목·방법', '시료·장비 준비', '일정표'] },
+    { name: '1차 시험·측정', phase: 0, tags: '시험' },
+    { name: '1차년도 결과 분석', phase: 0, tags: '분석' },
+    { name: '연차 보고서 작성', phase: 0, type: '제출', is_key: true, checklist: ['초안', '내부 검토', '제출본'] },
+    { name: '2차 시험·실증', phase: 1, tags: '시험' },
+    { name: '최종 결과 분석', phase: 1, tags: '분석' },
+    { name: '성과물 정리(논문·특허)', phase: 1, checklist: ['논문 투고', '특허 출원', '기술 이전 자료'] },
+    { name: '최종 보고서 작성', phase: 1, type: '제출', is_key: true, checklist: ['초안', '내부 검토', '제출본'] }
+  ]
+};
+
+// 시공 공정 예시: days = 기간(근무일), after = 선행 작업 번호(끝-시작). 새 프로젝트를 만든 날부터 날짜가 자동 계산됨
+export const BUILTIN_CONSTRUCTION_TEMPLATE = {
+  phases: [{ name: '준비', color: '#8a93a6' }, { name: '시공', color: '#2f6fde' }, { name: '검사', color: '#d9822b' }, { name: '준공', color: '#159a8c' }],
+  tasks: [
+    { name: '착공 준비·인허가 확인', phase: 0, days: 5, checklist: ['착공 신고', '공정표 제출', '안전관리계획'] },
+    { name: '가설 공사', phase: 0, days: 10, after: [0], trade: '가설' },
+    { name: '자재·장비 발주', phase: 0, days: 10, after: [0] },
+    { name: '토공사', phase: 1, days: 15, after: [1], trade: '토목' },
+    { name: '기초 공사', phase: 1, days: 20, after: [3], trade: '골조', is_key: true },
+    { name: '골조 공사', phase: 1, days: 40, after: [4, 2], trade: '골조', is_key: true },
+    { name: '설비·전기 공사', phase: 1, days: 30, after: [5], trade: '설비' },
+    { name: '마감 공사', phase: 1, days: 30, after: [5], trade: '마감' },
+    { name: '골조 검사', phase: 2, type: '홀드포인트', days: 1, after: [5], is_key: true },
+    { name: '자체 검사', phase: 2, type: '검토', days: 5, after: [6, 7] },
+    { name: '감리 검사', phase: 2, type: '검토', days: 5, after: [9] },
+    { name: '준공 서류 준비', phase: 3, type: '제출', days: 10, after: [9], checklist: ['준공 도면', '시험 성적서', '사진 대지'] },
+    { name: '준공 검사', phase: 3, type: '마일스톤', days: 1, after: [10, 11], is_key: true },
+    { name: '인수인계', phase: 3, days: 5, after: [12] }
+  ]
+};
 
 // 처음 깔 때 들어가는 설계 템플릿 예시 (프로젝트 설정에서 지울 수 있음). 칸반 열이 없으면 기본 4열
 export const BUILTIN_DESIGN_TEMPLATE = {

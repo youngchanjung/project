@@ -171,3 +171,28 @@ test('외부 협력자: 참여 프로젝트의 자기 카드만', async () => {
     assert.deepEqual(w.rows.map(r => r.user.id), [ex.id]);
   } finally { cookie = admin; }
 });
+
+test('연구·시공 기본 템플릿: 연구는 연차 단계, 시공은 기간·선행관계로 날짜 자동', async () => {
+  const { db } = await import('../src/db.js');
+  const r = (await call('GET', '/projects/templates?category=research')).body;
+  const rt = r.find(t => t.name === '연구 과제 기본');
+  assert.ok(rt); assert.deepEqual(rt.phases, ['1차년도', '2차년도']);
+  const c = (await call('GET', '/projects/templates?category=construction')).body.find(t => t.name === '시공 공정 기본');
+  assert.ok(c); assert.deepEqual(c.phases, ['준비', '시공', '검사', '준공']);
+  const p = (await call('POST', '/projects', { name: '시공 T', category: 'construction', calendars: 'KR', template_id: c.id })).body;
+  const ts = await db('tasks').where({ project_id: p.id }).orderBy('sort');
+  assert.equal(ts.length, 14);
+  assert.ok(ts.every(t => !t.undated));
+  const deps = await db('dependencies').where({ project_id: p.id });
+  assert.ok(deps.length >= 14);
+  // 골조 공사(5)는 기초(4)·자재 발주(2) 다 끝난 다음 근무일에 시작
+  const byName = n => ts.find(t => t.name === n);
+  assert.ok(byName('골조 공사').start > byName('기초 공사').end);
+  assert.ok(byName('인수인계').start > byName('준공 검사').end);
+  assert.equal(byName('토공사').trade, '토목');
+  // 시공 프로젝트를 템플릿으로 저장하면 기간·선행관계도 저장
+  const saved = (await call('POST', `/projects/${p.id}/templates`, { name: '우리 시공' })).body;
+  const data = JSON.parse((await db('project_templates').where({ id: saved.id }).first()).data);
+  assert.equal(data.tasks.find(t => t.name === '기초 공사').days, 20);
+  assert.deepEqual(data.tasks.find(t => t.name === '골조 공사').after.sort(), [2, 4]);
+});
