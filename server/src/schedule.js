@@ -59,7 +59,10 @@ export function wouldCycle(deps, predId, succId) {
  * 완료된 작업은 옮기지 않고, 최초 가능일(not_before)보다 앞당기지 않습니다.
  * @returns {Array<{id,start,end}>} 날짜가 바뀐 작업
  */
-export function recalc(tasks, deps, hol) {
+export function recalc(tasks0, deps, hol) {
+  // 하위 작업이 있는 요약 작업은 하위 작업에서 날짜를 모으므로 선행관계 계산에서 뺌
+  const parents = new Set(tasks0.map(t => t.parent_id).filter(Boolean));
+  const tasks = tasks0.filter(t => !parents.has(t.id));
   const byId = new Map(tasks.map(t => [t.id, { ...t }]));
   const preds = new Map(), indeg = new Map(tasks.map(t => [t.id, 0])), out = new Map();
   for (const d of deps) {
@@ -120,7 +123,8 @@ export function recalc(tasks, deps, hol) {
  * @returns {Map<id, {float:number, crit:boolean}>}
  */
 export function criticalPath(tasks, deps, hol) {
-  const live = tasks.filter(t => !t.undated && t.status !== '완료' && !t.actual_end && t.start && t.end);
+  const parents = new Set(tasks.map(t => t.parent_id).filter(Boolean));
+  const live = tasks.filter(t => !parents.has(t.id) && !t.undated && t.status !== '완료' && !t.actual_end && t.start && t.end);
   const res = new Map();
   if (!live.length) return res;
   let min = live[0].start, max = live[0].end;
@@ -159,6 +163,37 @@ export function criticalPath(tasks, deps, hol) {
     for (const p of preds.get(id) || []) { outdeg.set(p, outdeg.get(p) - 1); if (outdeg.get(p) === 0) queue.push(p); }
   }
   return res;
+}
+
+/**
+ * 요약 작업(하위 작업이 있는 작업)의 시작·종료·진행률을 하위 작업에서 모읍니다. 여러 단계도 아래에서부터.
+ * 진행률은 기간(일)으로 가중 평균. 하위가 모두 완료면 요약도 완료.
+ * @returns {Array<{id,start,end,progress,status}>} 바뀐 요약 작업
+ */
+export function rollup(tasks) {
+  const byId = new Map(tasks.map(t => [t.id, { ...t }]));
+  const kids = new Map();
+  for (const t of byId.values()) if (t.parent_id && byId.has(t.parent_id)) { if (!kids.has(t.parent_id)) kids.set(t.parent_id, []); kids.get(t.parent_id).push(t); }
+  const depth = id => { let d = 0, x = byId.get(id), g = 0; while (x?.parent_id && byId.has(x.parent_id) && g++ < 50) { d++; x = byId.get(x.parent_id); } return d; };
+  const order = [...kids.keys()].sort((a, b) => depth(b) - depth(a));
+  const changed = [];
+  for (const id of order) {
+    const p = byId.get(id), cs = kids.get(id).filter(c => !c.undated);
+    if (!cs.length) continue;
+    let start = cs[0].start, end = cs[0].end, w = 0, sum = 0;
+    for (const c of cs) {
+      if (c.start < start) start = c.start; if (c.end > end) end = c.end;
+      const d = diffDays(c.start, c.end) + 1; w += d; sum += d * (c.status === '완료' ? 100 : Number(c.progress) || 0);
+    }
+    const progress = Math.round(sum / w);
+    const allDone = cs.every(c => c.status === '완료');
+    const status = allDone ? '완료' : cs.some(c => c.status === '진행중' || c.status === '완료' || Number(c.progress) > 0) ? '진행중' : (p.status === '완료' ? '미착수' : p.status);
+    if (start !== p.start || end !== p.end || progress !== p.progress || status !== p.status || p.undated) {
+      Object.assign(p, { start, end, progress, status, undated: false });
+      changed.push({ id, start, end, progress, status });
+    }
+  }
+  return changed;
 }
 
 // 오늘 기준 작업 상태(화면 표시용)

@@ -12,7 +12,8 @@ import { tr } from '../i18n.js';
 import DateInput from '../components/DateInput.jsx';
 
 export default function Settings() {
-  const { can } = useProject();
+  const { can, project } = useProject();
+  const isCons = project.category === 'construction';
   return (
     <div className="grid2">
       <Info />
@@ -20,6 +21,7 @@ export default function Settings() {
       <BoardColumns />
       <Phases />
       <ImportExport />
+      {isCons && <TimelineEvents />}
       {can('pm') && <Baseline />}
       <div className="card" style={{ gridColumn: '1/-1' }}><h3>{tr('프로젝트 변경 이력')} <span className="small">{tr('최근 300건')}</span></h3><History /></div>
     </div>
@@ -221,17 +223,19 @@ function ImportExport() {
     } catch (e) { setErr(e.message); } finally { setBusy(false); }
   };
   return (
-    <div className="card"><h3>{tr('엑셀 불러오기 · 내보내기')}</h3>
+    <div className="card"><h3>{tr('엑셀 · 일정 파일 불러오기 · 내보내기')}</h3>
       <p className="small">{tr('불러오기: 계약 일정 통합본(Detail 시트), 일정표·이슈로그, 또는 이 프로그램에서 내보낸 파일. ID(이슈 No)가 같은 항목은 갱신하고 없는 항목은 추가합니다. 기존 데이터는 지우지 않습니다.')}</p>
+      <p className="small">{tr('일정 파일: MS Project XML(.xml), Primavera P6(.xer). 작업·선행관계·기준선·진행률을 가져오고, 맨 위 요약 작업(WBS)은 단계로, 그 아래 요약 작업은 하위 작업이 있는 요약 작업으로 만듭니다. .mpp 파일은 MS Project에서 ‘다른 이름으로 저장 → XML 형식’으로 저장한 뒤 올리세요.')}</p>
       {err && <div className="err">{err}</div>}
       {can('pm') ? <>
-        <div className="toolbar"><input type="file" accept=".xlsx,.xlsm,.xls" multiple onChange={e => { setFiles([...e.target.files]); setPreview(null); }} />
+        <div className="toolbar"><input type="file" accept=".xlsx,.xlsm,.xls,.xml,.xer" multiple onChange={e => { setFiles([...e.target.files]); setPreview(null); }} />
           <button className="btn" disabled={!files.length || busy} onClick={() => send(true)}>{tr('미리 보기')}</button></div>
         {preview && <div className="ok">
           <div>{tr('인식한 시트:')} {preview.sheets.join(', ')}</div>
           <div>{tr('단계 +')}{preview.phases} {tr('· 작업 +')}{preview.tasksAdded} {tr('/ 갱신')} {preview.tasksUpdated} {tr('· 선행관계')} {preview.deps}{tr('건 · 이슈 +')}{preview.issuesAdded} {tr('/ 갱신')} {preview.issuesUpdated} {tr('· 공휴일 +')}{preview.holidays}</div>
           {preview.phasesRemoved > 0 && <div className="small">{tr('파일에 없는 빈 기본 단계 {n}개는 지웁니다.', { n: preview.phasesRemoved })}</div>}
           {preview.dayBasis === 'calendar' && <div>{tr('계약 일정 엑셀이 달력일 기준이라 이 프로젝트의 계산 기준을 ‘달력일’로 맞춥니다.')}</div>}
+          {preview.skipped?.length > 0 && <div className="small">{tr('가져오지 않은 항목 (날짜 없음·SF 관계 등):')} {preview.skipped.slice(0, 8).join(', ')}{preview.skipped.length > 8 ? ' …' : ''}</div>}
           {preview.depsSkipped.length > 0 && <div>{tr('대상 작업이 없어 건너뛸 선행관계:')} {preview.depsSkipped.slice(0, 8).join(', ')}{preview.depsSkipped.length > 8 ? ' ' + tr('외 {n}건', { n: preview.depsSkipped.length - 8 }) : ''}</div>}
           <div>{preview.shifted ? tr('엑셀 날짜가 선행관계 규칙과 다른 작업 {n}건이 있습니다.', { n: preview.shifted }) : tr('엑셀 날짜가 선행관계 규칙과 모두 일치합니다.')}</div>
           {preview.shifted > 0 && <label className="small"><input type="checkbox" checked={recalc} onChange={e => setRecalc(e.target.checked)} /> {tr('불러온 뒤 선행관계 규칙대로 날짜 다시 계산 (끄면 엑셀 날짜 그대로)')}</label>}
@@ -276,6 +280,35 @@ function Baseline() {
           {pm && <button className="btn sm danger" onClick={() => del(b)}>{tr('삭제')}</button>}</div>)}
         {!baselines.length && <div className="empty">{tr('저장한 기준선 버전이 없습니다.')}</div>}
       </div>
+    </div>
+  );
+}
+
+// 간트 머리 기간 표시 (우기, 검측 주간, 동절기 등)
+function TimelineEvents() {
+  const { project, events, can, reload, toast } = useProject();
+  const blank = { name: '', start: '', end: '', color: '#d9822b' };
+  const [f, setF] = useState(blank);
+  const ed = can() && !project.archived;
+  const add = async () => {
+    try { await api.post(`/projects/${project.id}/events`, f); setF(blank); await reload(); }
+    catch (e) { toast(e.message); }
+  };
+  const del = async e => { try { await api.del(`/projects/${project.id}/events/${e.id}`); await reload(); } catch (x) { toast(x.message); } };
+  return (
+    <div className="card"><h3>{tr('간트 기간 표시')}</h3>
+      <p className="small">{tr('우기, 검측 주간, 동절기처럼 일정에 영향을 주는 기간을 간트 머리와 배경에 띠로 표시합니다.')}</p>
+      <div className="list">
+        {events.map(e => <div key={e.id} className="item"><span className="dot" style={{ background: e.color }} /><div className="main"><div className="t">{e.name}</div><div className="small">{e.start} ~ {e.end}</div></div>
+          {ed && <button className="btn sm danger" onClick={() => del(e)}>{tr('삭제')}</button>}</div>)}
+        {!events.length && <div className="empty">{tr('표시할 기간이 없습니다.')}</div>}
+      </div>
+      {ed && <div className="toolbar" style={{ marginTop: 8 }}>
+        <input type="text" value={f.name} onChange={e => setF({ ...f, name: e.target.value })} placeholder={tr('예: 우기')} style={{ width: 160 }} />
+        <DateInput value={f.start} onChange={e => setF({ ...f, start: e.target.value, end: !f.end || f.end < e.target.value ? e.target.value : f.end })} /> ~ <DateInput value={f.end} onChange={e => setF({ ...f, end: e.target.value })} />
+        <input type="color" value={f.color} onChange={e => setF({ ...f, color: e.target.value })} title={tr('색')} />
+        <button className="btn primary" disabled={!f.name || !f.start} onClick={add}>{tr('+ 기간 추가')}</button>
+      </div>}
     </div>
   );
 }

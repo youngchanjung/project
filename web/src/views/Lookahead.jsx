@@ -25,7 +25,8 @@ export default function Lookahead() {
   const hm = new Map(holidays.map(h => [h.date, h.name]));
   const days = []; for (let d = w0; d <= w1; d = addD(d, 1)) days.push(d);
 
-  const ts = filtered.filter(t => !t.undated && t.st !== '완료' && (!opt.critOnly || t.crit) && ((t.start <= w1 && t.end >= w0) || t.st === '지연'))
+  const parents = new Set(tasks.map(t => t.parent_id).filter(Boolean)); // 요약 작업은 빼고 실제 작업만
+  const ts = filtered.filter(t => !t.undated && !parents.has(t.id) && t.st !== '완료' && (!opt.critOnly || t.crit) && ((t.start <= w1 && t.end >= w0) || t.st === '지연'))
     .sort((a, b) => a.start.localeCompare(b.start) || a.end.localeCompare(b.end));
   const phaseName = id => phases.find(p => p.id === id)?.name || '';
   const keyOf = t => opt.group === 'phase' ? (t.phase_id || 0) : opt.group === 'none' ? 'all' : (t[opt.group] || '');

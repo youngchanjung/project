@@ -15,6 +15,7 @@ import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
 import Meetings from '../views/Meetings.jsx';
 import Lookahead from '../views/Lookahead.jsx';
+import Progress from '../views/Progress.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
 import { tr } from '../i18n.js';
@@ -70,7 +71,7 @@ export default function Project() {
   const color = pid => phaseColor(data.phases, pid);
   const ctx = {
     ...data, tasks, filtered, filter, setFilter, reload, role, can, color, td, toast,
-    baseSel, setBaseSel, baselines: data.baselines || [],
+    baseSel, setBaseSel, baselines: data.baselines || [], events: data.events || [],
     // 이 작업의 기준선 {start, end} (없으면 null)
     bl: t => {
       if (baseSel) { const r = baseRows?.get(t.id); return r ? { start: r.start, end: r.end } : null; }
@@ -85,7 +86,7 @@ export default function Project() {
   const cat = catOf(p.category);
   const isCons = cat.key === 'construction';
   const NAMES = {
-    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), progress: tr('진척 입력'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
     board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
   const tabs = cat.tabs.map(k => [k, NAMES[k]]);
@@ -113,6 +114,7 @@ export default function Project() {
           <Route path="schedule" element={<Schedule />} />
           <Route path="gantt" element={<Gantt />} />
           <Route path="lookahead" element={<Lookahead />} />
+          <Route path="progress" element={<Progress />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />
