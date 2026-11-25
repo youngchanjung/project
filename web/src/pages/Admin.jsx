@@ -336,7 +336,7 @@ function M365() {
         <tr><td>{tr('Outlook 일정')}</td><td>{on(f.outlook)}</td><td className="small">{f.outlook && `${tr(s.outlookTasks ? '회의 + 담당 작업' : '회의만')} · ${tr('연결된 일정 {n}개', { n: st.links })}`}</td></tr>
         <tr><td>{tr('Teams 채널 알림')}</td><td>{on(st.teamsProjects > 0)}</td><td className="small">{tr('프로젝트 {n}개 (프로젝트 설정에서 지정)', { n: st.teamsProjects })}</td></tr>
       </tbody></table></div>
-      <p className="small">{tr('테넌트')}: {s.tenantId || '-'} · {tr('앱')}: {s.clientId || '-'} · {tr('비밀 값')}: {tr(s.secret ? '있음' : '없음')} · {tr('주소')}: {s.publicUrl || tr('(PUBLIC_URL 없음: 메일·Teams 카드에 바로가기 링크가 빠짐)')} · {tr('하루 알림')}: {s.dailyHour}{tr('시')}</p>
+      <p className="small">{tr('테넌트')}: {s.tenantId || '-'} · {tr('앱')}: {s.clientId || '-'} · {tr('비밀 값')}: {tr(s.secret ? '있음' : '없음')} · {tr('주소')}: {s.publicUrl || tr('(PUBLIC_URL 없음: 메일·Teams 카드에 바로가기 링크가 빠짐)')} · {tr('하루 알림')}: {tr('{n}시', { n: s.dailyHour })}</p>
       {(f.mail || f.outlook) && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
         {f.mail && <><input type="email" value={to} onChange={e => setTo(e.target.value)} placeholder={tr('받을 주소 (비우면 내 메일)')} style={{ flex: 1, minWidth: 160 }} />
           <button className="btn sm" disabled={busy} onClick={() => act(() => api.post('/m365/test-mail', { to }), r => tr('{to} 로 시험 메일을 보냈습니다.', { to: r.to }))}>{tr('시험 메일')}</button></>}
