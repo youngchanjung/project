@@ -10,8 +10,8 @@ import { Tx } from '../contentTr.jsx';
 const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--plan)', 보류: 'var(--hold)' };
 const ST_ORDER = ['지연', '진행중', '예정', '보류', '완료'];
 // 왼쪽 표의 열 (작업명 다음). [키, 제목, 폭]
-const COLS = [['st', '상태', 88], ['start', '시작일', 114], ['end', '마감일', 114], ['owner', '담당', 110]];
-const RH = 32;
+const COLS = [['st', '상태', 110], ['start', '시작일', 140], ['end', '마감일', 140], ['owner', '담당', 130]];
+const RH = 38;
 const OPT0 = { cols: { st: true, start: true, end: true, owner: false }, base: true, deps: true, lbl: true, group: 'phase' };
 function loadOpt() {
   try {
@@ -84,7 +84,7 @@ export default function Gantt() {
   useEffect(() => { if (wrap.current) wrap.current.scrollLeft = Math.max(0, x(td) - 200); }, [zoom]); // eslint-disable-line
 
   const cols = COLS.filter(([k]) => opt.cols[k]);
-  const NAME_W = window.innerWidth < 1000 ? 200 : 320; // 좁은 화면에서는 작업명 칸을 줄임
+  const NAME_W = window.innerWidth < 1000 ? 230 : 360; // 좁은 화면에서는 작업명 칸을 줄임
   const LW = NAME_W + cols.reduce((a, c) => a + c[2], 0);
   const setZ = z => { setZoom(z); localStorage.setItem('gantt-zoom', z); };
 
