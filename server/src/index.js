@@ -24,7 +24,8 @@ import { issuesRouter } from './routes/issues.js';
 import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
-import { startScheduler } from './scheduler.js';
+import { startScheduler, onPeriodic } from './scheduler.js';
+import { scheduleSync, syncAll } from './outlook.js';
 
 export function createApp() {
   const app = express();
@@ -44,6 +45,16 @@ export function createApp() {
       || (req.method === 'GET' && /^\/projects\/?$/.test(p))
       || /^\/projects\/\d+\/(data|tasks|time)(\/|$)/.test(p);
     if (!ok) return res.status(403).json({ error: '외부 협력자 계정은 이 기능을 쓸 수 없습니다.' });
+    next();
+  });
+  // 프로젝트 안의 내용을 바꾸면 몇 초 뒤 Outlook 일정 맞추기 (M365 설정이 없으면 아무 일도 안 함)
+  api.use('/projects', (req, res, next) => {
+    const fromPath = Number(req.path.match(/^\/(\d+)/)?.[1]); // 끝난 뒤에는 req.path 가 바뀌므로 미리
+    if (req.method !== 'GET') res.on('finish', () => {
+      if (res.statusCode >= 400) return;
+      const pid = fromPath || Number(res.locals.projectId);
+      if (pid) scheduleSync(pid);
+    });
     next();
   });
   api.use('/auth', authRouter);
@@ -103,5 +114,6 @@ if (isMain) {
     console.log(`일정관리 서버 시작: ${tls ? 'https' : 'http'}://localhost:${config.port}  (DB: ${config.dbClient === 'pg' ? 'PostgreSQL' : config.sqliteFile})`);
   });
   resumeMeetings().catch(e => console.error('회의록 처리 재개 실패', e));
+  onPeriodic(syncAll);
   startScheduler();
 }

@@ -11,6 +11,7 @@ process.env.DB_CLIENT = 'sqlite';
 process.env.DATA_DIR = tmp;
 process.env.SESSION_SECRET = 'test';
 process.env.M365_MAIL_DELAY_MS = '0';
+process.env.M365_SYNC_DELAY_MS = '0';
 const wait = (ms = 150) => new Promise(r => setTimeout(r, ms));
 
 // ---- 가짜 Microsoft (로그인·Graph·Teams 웹후크) ----
@@ -126,4 +127,63 @@ test('메일 알림: 담당 지정 알림을 메일로, 끄면 안 보냄, 메�
   await call('PATCH', `/api/projects/${p.id}/tasks/${t.id}`, { assignee_id: lee.id });
   await wait();
   assert.equal(ms.mails.length, 0);
+});
+
+test('Outlook: 담당 작업은 종일 일정, 회의는 참석자 초대·Teams 링크, 바꾸면 고치고 지우면 지움', async () => {
+  const { idle, syncAll } = await import('../src/outlook.js');
+  const sync = async () => { await wait(50); await idle(); };
+  const users = (await call('GET', '/api/users')).body;
+  const lee = users.find(u => u.username === 'lee');
+  const choi = (await call('POST', '/api/users', { username: 'choi', name: '최민수', password: 'pass12345', email: 'choi@corp.test' })).body;
+  const p = (await call('POST', '/api/projects', { name: '일정 시험', category: 'research' })).body;
+  await sync();
+  ms.events.clear();
+  // 담당 작업 → 담당자 달력에 종일 일정
+  const t = (await call('POST', `/api/projects/${p.id}/tasks`, { name: '시료 준비', start: '2026-12-01', end: '2026-12-03', assignee_id: choi.id })).body.task;
+  await sync();
+  let evs = [...ms.events.values()];
+  assert.equal(evs.length, 1);
+  assert.equal(evs[0].mailbox, 'choi@corp.test');
+  assert.equal(evs[0].subject, '[일정 시험] 시료 준비');
+  assert.equal(evs[0].isAllDay, true);
+  assert.equal(evs[0].end.dateTime, '2026-12-04T00:00:00');
+  assert.equal(evs[0].showAs, 'free');
+  // 고치면 같은 일정을 고침, 같은 내용이면 다시 안 보냄
+  const n0 = ms.calls.length;
+  await call('PATCH', `/api/projects/${p.id}/tasks/${t.id}`, { end: '2026-12-05' });
+  await sync();
+  assert.equal(ms.events.size, 1);
+  assert.equal([...ms.events.values()][0].end.dateTime, '2026-12-06T00:00:00');
+  assert.ok(ms.calls.slice(n0).some(c => c.startsWith('PATCH')));
+  const n1 = ms.calls.length;
+  await syncAll();
+  assert.equal(ms.calls.slice(n1).filter(c => !c.includes('/token')).length, 0);
+  // 담당자가 바뀌면 예전 사람 일정은 지우고 새 사람에게
+  await call('PATCH', `/api/projects/${p.id}/tasks/${t.id}`, { assignee_id: lee.id });
+  await sync();
+  evs = [...ms.events.values()];
+  assert.equal(evs.length, 1); assert.equal(evs[0].mailbox, 'lee@corp.test');
+  // 회의: 담당자 사서함, 참석자 초대, Teams 회의 링크가 작업에 저장
+  const m = (await call('POST', `/api/projects/${p.id}/tasks`, { name: '중간 점검 회의', type: '회의', start: '2026-12-10', start_time: '14:00', assignee_id: lee.id, attendees: [choi.id, lee.id], teams_meeting: true, location: '3층 회의실' })).body.task;
+  await sync();
+  const mev = [...ms.events.values()].find(e => e.subject.includes('중간 점검'));
+  assert.equal(mev.mailbox, 'lee@corp.test');
+  assert.equal(mev.start.dateTime, '2026-12-10T14:00:00');
+  assert.equal(mev.end.dateTime, '2026-12-10T15:00:00');
+  assert.equal(mev.start.timeZone, 'Korea Standard Time');
+  assert.deepEqual(mev.attendees.map(a => a.emailAddress.address), ['choi@corp.test']);
+  assert.equal(mev.isOnlineMeeting, true);
+  assert.equal(mev.location.displayName, '3층 회의실');
+  const data = (await call('GET', `/api/projects/${p.id}/data`)).body;
+  const saved = data.tasks.find(x => x.id === m.id);
+  assert.equal(saved.meeting_url, `https://teams.test/join/${mev.id}`);
+  assert.equal(saved.outlook_event_id, mev.id);
+  assert.equal(saved.teams_meeting, true);
+  // 작업을 지우면 일정도 지움, 프로젝트를 보관하면 모두 지움
+  await call('DELETE', `/api/projects/${p.id}/tasks/${t.id}`);
+  await sync();
+  assert.equal([...ms.events.values()].filter(e => e.subject.includes('시료')).length, 0);
+  await call('PATCH', `/api/projects/${p.id}`, { archived: true });
+  await sync();
+  assert.equal(ms.events.size, 0);
 });

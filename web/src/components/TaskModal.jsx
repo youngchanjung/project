@@ -18,10 +18,13 @@ export default function TaskModal({ id, preset, onClose }) {
   const editable = can();
   const isCons = catOf(project.category).key === 'construction';
   const { user } = useApp();
+  // M365 연동이 켜져 있으면 회의를 Outlook·Teams 로
+  const [outlookOn, setOutlookOn] = useState(false);
+  useEffect(() => { api.get('/auth/providers').then(p => setOutlookOn(!!p.outlook)).catch(() => {}); }, []);
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', weight: '', ...preset };
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', teams_meeting: false, company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', weight: '', ...preset };
   const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
-    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '', weight: x.weight ?? '' });
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', teams_meeting: !!x.teams_meeting, company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '', weight: x.weight ?? '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
   // 하위 작업(WBS): 자기 자신과 자기 하위 작업은 상위로 고를 수 없음
   const kids = t ? tasks.filter(x => x.parent_id === t.id) : [];
@@ -105,6 +108,9 @@ export default function TaskModal({ id, preset, onClose }) {
             <label>{tr('장소')}</label><input type="text" value={f.location || ''} onChange={set('location')} placeholder={tr('예: 3층 회의실')} />
             <label>{tr('회의 링크')}</label><div className="row"><input type="text" value={f.meeting_url || ''} onChange={set('meeting_url')} placeholder="https://teams.microsoft.com/…" style={{ flex: 1 }} />
               {t?.meeting_url && <a className="btn sm" href={t.meeting_url} target="_blank" rel="noreferrer">{tr('참가')}</a>}</div>
+            {outlookOn && <><span />
+              <div><label className="small"><input type="checkbox" checked={!!f.teams_meeting} onChange={set('teams_meeting')} /> {tr('Teams 회의 만들기')}</label>
+                <div className="small muted">{tr('저장하면 담당자 Outlook 달력에 회의가 등록되고 참석자에게 초대 메일이 갑니다. Teams 회의를 켜면 링크가 자동으로 채워집니다.')}</div></div></>}
             <label>{tr('참석자')}</label>
             <div className="att-list">{members.map(m => (
               <label key={m.id} className="small"><input type="checkbox" checked={attendeeIds(f).includes(m.id)} onChange={e => {

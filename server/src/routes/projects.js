@@ -114,6 +114,7 @@ projectsRouter.post('/', ah(async (req, res) => {
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'create', label: tpl ? `${body.name} (템플릿: ${tpl.name})` : body.name });
     return id;
   });
+  res.locals.projectId = id;
   res.json(await loadProject(id));
 }));
 
@@ -252,7 +253,7 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
   res.json({
     project: { ...project, archived: !!project.archived }, phases,
     leaves: req.user.external ? leaves.filter(l => l.user_id === req.user.id) : leaves,
-    tasks: tasks.map(t => ({ ...t, spent: spent.get(t.id) || 0, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
+    tasks: tasks.map(t => ({ ...t, spent: spent.get(t.id) || 0, is_key: !!t.is_key, teams_meeting: !!t.teams_meeting, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
     deps, issues, members, role, holidays: hol, baselines, events,
     columns: columns.map(c => ({ ...c, is_review: !!c.is_review })), checklist: checklist.map(c => ({ ...c, done: !!c.done }))
   });
