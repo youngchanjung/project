@@ -45,7 +45,7 @@ export default function Calendar() {
     <>
       <div className="toolbar">
         <button className="btn" onClick={() => setM(monthAdd(m, -1))}>◀</button>
-        <b style={{ fontSize: 24.5, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
+        <b style={{ fontSize: 26, minWidth: 120, textAlign: 'center' }}>{new Date(m + '-15T00:00:00').toLocaleDateString(locale(), { year: 'numeric', month: 'long' })}</b>
         <button className="btn" onClick={() => setM(monthAdd(m, 1))}>▶</button>
         <button className="btn" onClick={() => { setM(td.slice(0, 7)); setSel(td); }}>{tr('오늘')}</button>
         <ExportButton toast={toast} make={() => {

@@ -128,7 +128,7 @@ function ProjectsPage({ cat }) {
           return (
             <div key={p.id} className="card pcard" onClick={() => nav(`/projects/${p.id}`)} style={p.archived ? { opacity: .6 } : undefined}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <div><span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span><b style={{ fontSize: 21 }}>{p.name}</b><div className="small">{[p.code, p.client, p.pms.length ? `PM ${p.pms.join(', ')}` : null].filter(Boolean).join(' · ')}</div></div>
+                <div><span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span><b style={{ fontSize: 22.5 }}>{p.name}</b><div className="small">{[p.code, p.client, p.pms.length ? `PM ${p.pms.join(', ')}` : null].filter(Boolean).join(' · ')}</div></div>
                 <div style={{ textAlign: 'right' }}><span className={`badge ${p.status === '진행중' ? 'b-진행중' : p.status === '완료' ? 'b-완료' : p.status === '보류' ? 'b-보류' : 'b-예정'}`}>{tr(p.archived ? '보관' : p.status)}</span><div className="small">{tr(ROLE_NAME[p.myRole])}</div></div>
               </div>
               <div className="small">{s.start ? `${fmtY(s.start)} ~ ${fmtY(s.end)}` : tr('날짜 있는 작업 없음')}</div>
