@@ -497,7 +497,7 @@ tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--hover)}
 .kcard-wrap{position:relative}
 .kclaim{position:absolute;right:10px;top:8px;border:1px solid var(--accent);background:var(--panel);color:var(--accent);border-radius:7px;padding:2px 8px;font-size:calc(17px*var(--fs));cursor:pointer;opacity:0;transition:opacity .15s}
 .kcard-wrap:hover .kclaim,.kclaim:focus{opacity:1}
-@media (hover:none){.kclaim{opacity:1}}
+@media (hover:none){.kclaim{opacity:1;top:auto;bottom:8px}}
 .wl-leave{color:var(--hold);font-size:calc(16px*var(--fs))}
 /* 설계: 배치 달력 */
 .plan{display:flex;gap:12px;align-items:flex-start}
@@ -570,3 +570,44 @@ tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--hover)}
 .pagetip .pt-act{display:flex;gap:6px;align-items:center;flex-wrap:wrap;justify-content:flex-end}
 @media(max-width:700px){.pagetip{flex-wrap:wrap;margin:10px 10px 0}.pagetip .pt-act{width:100%;justify-content:flex-start}}
 @media print{.pagetip{display:none}}
+
+/* 휴대폰·좁은 화면 (11/25 모바일 최적화) */
+.tb-tools{display:contents}
+.tb-more{display:none}
+@media(max-width:700px){
+  main.page{padding:10px 10px 60px}
+  .topbar{gap:6px;padding:6px 10px;flex-wrap:nowrap;min-height:48px}
+  .topbar .brand{min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tb-more{display:inline-block}
+  .tb-tools{display:none}
+  .tb-tools.open{display:flex;flex-direction:column;align-items:stretch;gap:8px;position:absolute;top:100%;left:0;right:0;background:var(--panel);border-bottom:1px solid var(--line);box-shadow:0 8px 20px rgba(0,0,0,.12);padding:10px 12px}
+  .tb-tools.open select,.tb-tools.open .btn{width:100%}
+  .tb-tools.open .iconbtn{width:auto;align-self:flex-start}
+  h1.title{font-size:calc(23px*var(--fs))}
+  .phead{gap:8px}
+  .phead .picon{display:none}
+  .tabs{flex-wrap:nowrap;overflow-x:auto;overflow-y:hidden;scrollbar-width:none;-webkit-overflow-scrolling:touch}
+  .tabs::-webkit-scrollbar{display:none}
+  .tab{white-space:nowrap;padding:7px 10px;flex:none}
+  .card{padding:12px}
+  .card h3{flex-wrap:wrap}
+  .card h3 .row,.card h3>span{flex-wrap:wrap}
+  .toolbar>*{max-width:100%}
+  .toolbar .btn{white-space:normal}
+  .toolbar input[type=file]{width:100%}
+  .grid2>*{min-width:0}
+  .card>table{display:block;overflow-x:auto;max-width:100%}
+  .hproj-bar{display:none}
+  .hprojs{grid-template-columns:1fr}
+  .hproj{flex-wrap:wrap;row-gap:2px}
+  .modal{padding:0;align-items:stretch}
+  .mbox{max-width:none;max-height:none;height:100%;border-radius:0;padding:14px 14px 24px}
+  .plan{align-items:stretch}
+  .toolbar{flex-wrap:wrap}
+  .toolbar input[type=search]{flex:1 1 100%}
+  .fbar .tsearch{flex:1 1 0}
+  .fbar .fb-more{display:inline-block}
+  .fbar:not(.more)>*:not(.tsearch):not(.fb-more){display:none}
+  .gwrap{max-height:calc(100vh - 170px)}
+}
+.fb-more{display:none}
