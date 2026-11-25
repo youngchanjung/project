@@ -99,7 +99,6 @@ export default function Workload() {
         <p className="small">{tr('예상 시간은 시작일~마감일 사이 근무일에 고르게 나눠 계산합니다. 기한이 지난 할 일은 이번 주에 모두 넣습니다.')}</p>
       </div>}
       <TimeSummary />
-      {user.role === 'admin' && !user.external && <CostCard />}
       {leaveOpen && <LeaveModal onClose={() => { setLeaveOpen(false); setBump(b => b + 1); reload(); }} />}
     </>
   );
@@ -143,34 +142,6 @@ function TimeSummary() {
       {!table ? <div className="small">{tr('불러오는 중…')}</div> : !table.people.length ? <p className="small">{tr('이 기간에 기록한 시간이 없습니다. 카드를 열어 ‘시간 기록’ 탭에서 입력합니다.')}</p> :
         <div className="wl-wrap"><table className="wl"><thead><tr><th>{tr('담당자')}</th>{table.cols.map(c => <th key={c.id}>{c.name}</th>)}<th>{tr('합계')}</th></tr></thead>
           <tbody>{table.people.map(p => <tr key={p.id}><td className="nw">{p.name}</td>{table.cols.map(c => <td key={c.id}>{p.by[c.id] ? fmtH(r1(p.by[c.id])) : '-'}</td>)}<td><b>{fmtH(r1(p.total))}</b></td></tr>)}</tbody></table></div>}
-    </div>
-  );
-}
-
-// 인건비 예측 (관리자만): 기록 시간 × 단가 + 남은 예상 시간 × 단가, 설계비와 비교
-function CostCard() {
-  const { project, tasks } = useProject();
-  const [d, setD] = useState(null);
-  const stamp = tasks.map(t => `${t.id}:${t.version}:${t.spent}`).join(',');
-  useEffect(() => { api.get(`/projects/${project.id}/time/cost`).then(setD).catch(() => setD(null)); }, [project.id, stamp]);
-  if (!d) return null;
-  const won = n => `${Math.round(n).toLocaleString()}`;
-  const pct = d.fee ? Math.round((d.forecast / d.fee) * 100) : null;
-  const noRate = d.rows.filter(r => r.noRate && (r.hours || r.remainHours));
-  return (
-    <div className="card" style={{ marginTop: 12 }}>
-      <h3>{tr('인건비 예측')} <span className="small">{tr('관리자만 보입니다')}</span></h3>
-      <div className="kpis">
-        <div className="kpi"><span className="small">{tr('설계비')}</span><b>{d.fee != null ? won(d.fee) : '-'}</b></div>
-        <div className="kpi"><span className="small">{tr('쓴 인건비')}</span><b>{won(d.spent)}</b></div>
-        <div className="kpi"><span className="small">{tr('남은 예상')}</span><b>{won(d.remain)}</b></div>
-        <div className={`kpi ${pct != null && pct > 100 ? 'late' : pct != null && pct >= 80 ? 'soon' : ''}`}><span className="small">{tr('예상 합계')}{pct != null ? ` · ${pct}%` : ''}</span><b>{won(d.forecast)}</b></div>
-      </div>
-      {d.fee == null && <p className="small">{tr('설계비는 ‘설정 → 프로젝트 정보’에서 넣습니다.')}</p>}
-      {noRate.length > 0 && <p className="small" style={{ color: 'var(--soon)' }}>⚠ {tr('단가가 없는 사람: {names} (‘관리 → 계정 수정’에서 입력)', { names: noRate.map(r => r.name || tr('담당 없음')).join(', ') })}</p>}
-      {d.rows.length > 0 && <table><thead><tr><th>{tr('담당자')}</th><th>{tr('기록 시간')}</th><th>{tr('쓴 인건비')}</th><th>{tr('남은 예상 시간')}</th><th>{tr('남은 예상')}</th></tr></thead>
-        <tbody>{d.rows.map(r => <tr key={r.user_id}><td>{r.name || tr('담당 없음')}</td><td>{fmtH(r.hours)}</td><td>{won(r.cost)}</td><td>{fmtH(r.remainHours)}</td><td>{won(r.remainCost)}</td></tr>)}</tbody></table>}
-      <p className="small">{tr('남은 예상 = 끝나지 않은 할 일의 (예상 시간 − 이미 기록한 시간) × 담당자 단가')}</p>
     </div>
   );
 }

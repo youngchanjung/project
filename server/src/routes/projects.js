@@ -11,7 +11,7 @@ export const projectsRouter = Router();
 projectsRouter.use(requireLogin);
 
 const today = () => new Date().toISOString().slice(0, 10);
-const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis', 'category', 'agreement_start', 'agreement_end', 'partners', 'design_fee'];
+const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis', 'category', 'agreement_start', 'agreement_end', 'partners'];
 export const CATEGORIES = ['research', 'construction', 'design'];
 function cleanAgreement(b) {
   for (const f of ['agreement_start', 'agreement_end']) if (b[f] !== undefined) b[f] = optDate(b[f], f);
@@ -85,7 +85,6 @@ projectsRouter.get('/', ah(async (req, res) => {
 
 projectsRouter.post('/', ah(async (req, res) => {
   const body = pick(req.body || {}, PCOLS);
-  delete body.design_fee;
   body.calendars = normCalendars(body.calendars);
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
   if (!body.category) body.category = 'construction';
@@ -221,7 +220,7 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
   const cal = project.day_basis === 'calendar' ? null : new Set(hol.map(h => h.date));
   const cp = criticalPath(tasks.map(t => ({ ...t, undated: !!t.undated })), deps, cal);
   res.json({
-    project: { ...project, archived: !!project.archived, design_fee: req.user.role === 'admin' ? project.design_fee : undefined }, phases,
+    project: { ...project, archived: !!project.archived }, phases,
     leaves: req.user.external ? leaves.filter(l => l.user_id === req.user.id) : leaves,
     tasks: tasks.map(t => ({ ...t, spent: spent.get(t.id) || 0, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
     deps, issues, members, role, holidays: hol, baselines, events,
@@ -239,12 +238,6 @@ projectsRouter.patch('/:id', ah(async (req, res) => {
   if (up.archived !== undefined) up.archived = !!up.archived;
   checkCategory(up.category);
   cleanAgreement(up);
-  if (up.design_fee !== undefined) {
-    if (req.user.role !== 'admin') delete up.design_fee;
-    else if (up.design_fee === '' || up.design_fee === null) up.design_fee = null;
-    else if (!(Number(up.design_fee) >= 0)) throw new HttpError(400, '설계비는 0 이상 숫자로 입력하세요.');
-    else up.design_fee = Number(up.design_fee);
-  }
   await db('projects').where({ id }).update({ ...up, updated_at: now() });
   await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: before.name, changes: diff(before, up) });
   res.json(await loadProject(id));

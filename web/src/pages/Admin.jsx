@@ -89,13 +89,13 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
   const isNew = !u.id;
   const [f, setF] = useState({
     username: u.username || '', name: u.name || '', email: u.email || '', role: u.role || 'user', active: u.active ?? true, password: '',
-    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || '', weekly_hours: u.weekly_hours ?? 40, hourly_rate: u.hourly_rate ?? '', external: !!u.external
+    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || '', weekly_hours: u.weekly_hours ?? 40, external: !!u.external
   });
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   const save = async () => {
     try {
-      const b = { ...f, department_id: f.department_id === '' ? null : Number(f.department_id), hourly_rate: f.hourly_rate === '' ? null : f.hourly_rate };
+      const b = { ...f, department_id: f.department_id === '' ? null : Number(f.department_id) };
       if (isNew) await api.post('/users', b);
       else { delete b.username; if (!b.password) delete b.password; await api.patch(`/users/${u.id}`, b); }
       onSaved();
@@ -116,7 +116,6 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
         <label>{tr('회사 메일')}</label><input type="email" value={f.email} onChange={set('email')} placeholder={tr('M365 로그인 연결에 사용')} />
         <label>{tr('전화')}</label><input type="text" value={f.phone} onChange={set('phone')} />
         <label>{tr('주당 근무 시간')}</label><div className="row"><input type="number" min="0" max="80" step="1" value={f.weekly_hours} onChange={set('weekly_hours')} style={{ width: 90 }} /><span className="small">{tr('업무량 화면의 기준 (기본 40, 시간제는 줄여서)')}</span></div>
-        <label>{tr('시간당 단가')}</label><div className="row"><input type="number" min="0" step="1000" value={f.hourly_rate} onChange={set('hourly_rate')} style={{ width: 140 }} /><span className="small">{tr('인건비 예측에 씀 · 관리자만 보입니다')}</span></div>
         <label>{tr('외부 협력자')}</label><label className="small"><input type="checkbox" checked={f.external} onChange={set('external')} disabled={u.id === me.id} /> {tr('참여 프로젝트에서 자기 카드만 보고 고칠 수 있음 (이슈·회의록·엑셀 등은 막힘)')}</label>
         <label>{tr('권한')}</label><select value={f.role} onChange={set('role')} disabled={u.id === me.id}><option value="user">{tr('일반')}</option><option value="admin">{tr('관리자')}</option></select>
         <label>{tr(isNew ? '초기 비밀번호' : '비밀번호 재설정')}</label><input type="password" value={f.password} onChange={set('password')} placeholder={tr(isNew ? '8자 이상' : '바꿀 때만 입력')} />

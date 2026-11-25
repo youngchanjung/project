@@ -382,7 +382,7 @@ const migrations = [
     }
   },
   {
-    // 설계 2·3순위(11/25): 투입 시간 기록, 휴가·부재, 인건비(단가·설계비), 외부 협력자
+    // 설계 2·3순위(11/25): 투입 시간 기록, 휴가·부재, 외부 협력자
     name: '014_design_time_leave',
     async up(k) {
       await k.schema.createTable('time_entries', t => {
@@ -408,11 +408,7 @@ const migrations = [
         t.index(['user_id']);
       });
       await k.schema.alterTable('users', t => {
-        t.float('hourly_rate'); // 시간당 단가 (인건비 예측, 관리자만 봄)
         t.boolean('external').notNullable().defaultTo(false); // 외부 협력자: 참여 프로젝트의 자기 카드만 봄
-      });
-      await k.schema.alterTable('projects', t => {
-        t.float('design_fee'); // 설계비(예산), 인건비 예측과 비교
       });
     }
   }

@@ -1,8 +1,8 @@
-// 설계 2·3순위: 투입 시간 기록, 휴가·부재, 인건비 예측
+// 설계 2·3순위: 투입 시간 기록, 휴가·부재
 import { Router } from 'express';
 import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, isDate } from '../util.js';
-import { requireLogin, requireAdmin } from '../auth.js';
+import { requireLogin } from '../auth.js';
 import { need, loadProject } from './projects.js';
 
 const ymd = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
@@ -52,34 +52,6 @@ timeRouter.delete('/:eid', ah(async (req, res) => {
   await db('time_entries').where({ id: e.id }).del();
   await audit(null, { user: req.user, projectId: pid, entity: 'time', entityId: e.id, action: 'delete', label: `${e.date} ${e.hours}h` });
   res.json({ ok: true });
-}));
-
-// ---- 인건비 예측: /api/projects/:pid/cost (관리자만) ----
-//   쓴 비용 = 기록한 시간 × 단가, 남은 비용 = 끝나지 않은 할 일의 예상 시간 − 이미 쓴 시간(0 아래로는 안 내려감) × 담당자 단가
-timeRouter.get('/cost', requireAdmin, ah(async (req, res) => {
-  const pid = Number(req.params.pid);
-  const p = await loadProject(pid);
-  const [entries, tasks, users] = await Promise.all([
-    db('time_entries').where({ project_id: pid }),
-    db('tasks').where({ project_id: pid }).whereNot('type', '회의'),
-    db('users').select('id', 'name', 'hourly_rate')
-  ]);
-  const rate = new Map(users.map(u => [u.id, Number(u.hourly_rate) || 0]));
-  const uname = new Map(users.map(u => [u.id, u.name]));
-  const usedByTask = new Map();
-  for (const e of entries) if (e.task_id) usedByTask.set(e.task_id, (usedByTask.get(e.task_id) || 0) + e.hours);
-  const per = new Map(); // user → { hours, cost, remainHours, remainCost }
-  const row = uid => { if (!per.has(uid)) per.set(uid, { user_id: uid, name: uid ? uname.get(uid) || '?' : '', hours: 0, cost: 0, remainHours: 0, remainCost: 0, noRate: uid ? !rate.get(uid) : false }); return per.get(uid); };
-  for (const e of entries) { const r = row(e.user_id); r.hours += e.hours; r.cost += e.hours * (rate.get(e.user_id) || 0); }
-  for (const t of tasks) {
-    if (t.status === '완료' || t.actual_end || !t.est_hours) continue;
-    const left = Math.max(0, t.est_hours - (usedByTask.get(t.id) || 0));
-    const r = row(t.assignee_id || 0); r.remainHours += left; r.remainCost += left * (rate.get(t.assignee_id) || 0);
-  }
-  const rows = [...per.values()].map(r => ({ ...r, hours: r1(r.hours), cost: Math.round(r.cost), remainHours: r1(r.remainHours), remainCost: Math.round(r.remainCost) }))
-    .sort((a, b) => (b.cost + b.remainCost) - (a.cost + a.remainCost));
-  const spent = rows.reduce((a, r) => a + r.cost, 0), remain = rows.reduce((a, r) => a + r.remainCost, 0);
-  res.json({ fee: p.design_fee ?? null, spent, remain, forecast: spent + remain, rows });
 }));
 
 // ---- 휴가·부재: /api/leaves ----

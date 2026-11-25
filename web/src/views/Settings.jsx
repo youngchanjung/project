@@ -40,7 +40,7 @@ function Info() {
   const ed = can('pm');
   const save = async patch => {
     try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis, category: f.category,
-      agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, partners: f.partners || null, ...(user.role === 'admin' ? { design_fee: f.design_fee === '' || f.design_fee == null ? null : f.design_fee } : {}) }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
+      agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, partners: f.partners || null }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
     catch (e) { setErr(e.message); }
   };
   const [delOpen, setDelOpen] = useState(false);
@@ -59,7 +59,6 @@ function Info() {
           <label>{tr('협약 기간')}</label><div className="row"><DateInput value={f.agreement_start || ''} onChange={set('agreement_start')} /> ~ <DateInput value={f.agreement_end || ''} onChange={set('agreement_end')} /></div>
           <label>{tr('협력 기관')}</label><input type="text" value={f.partners || ''} onChange={set('partners')} placeholder={tr('쉼표로 구분')} />
         </>}
-        {user.role === 'admin' && <><label>{tr('설계비')}</label><div className="row"><input type="number" min="0" value={f.design_fee ?? ''} onChange={set('design_fee')} style={{ width: 180 }} /><span className="small">{tr('인건비 예측과 비교 (관리자만 보입니다)')}</span></div></>}
         <label>{tr('상태')}</label><select value={f.status} onChange={set('status')}>{['계획', '진행중', '보류', '완료'].map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
         <label>{tr('휴일 달력')}</label>
         <div className="row">{COUNTRIES.map(({ code: c, name }) => (

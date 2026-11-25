@@ -117,10 +117,10 @@ test('프로젝트 템플릿: 기본 템플릿, 저장, 새 프로젝트에 복�
   assert.equal((await call('POST', '/projects', { name: 'X', category: 'design', template_id: 99999 })).status, 400);
 });
 
-test('투입 시간 기록·인건비·휴가가 업무량에 반영', async () => {
+test('투입 시간 기록·휴가가 업무량에 반영', async () => {
   const p = (await call('POST', '/projects', { name: '설계 E', category: 'design' })).body;
   const me = (await call('GET', '/auth/me')).body.user;
-  const k = (await call('POST', '/users', { username: 'kim2', name: '김기록', password: 'pass12345', hourly_rate: 30000 })).body;
+  const k = (await call('POST', '/users', { username: 'kim2', name: '김기록', password: 'pass12345' })).body;
   await call('PUT', `/projects/${p.id}/members/${k.id}`, { role: 'member' });
   const t = (await call('POST', `/projects/${p.id}/tasks`, { name: '평면', assignee_id: k.id, start: '2026-11-23', end: '2026-11-27', est_hours: 10 })).body.task;
   assert.equal((await call('POST', `/projects/${p.id}/time`, { task_id: t.id, hours: 0 })).status, 400);
@@ -129,13 +129,6 @@ test('투입 시간 기록·인건비·휴가가 업무량에 반영', async () 
   await call('POST', `/projects/${p.id}/time`, { task_id: t.id, hours: 2.5, date: '2026-11-25' });
   let d = (await call('GET', `/projects/${p.id}/data`)).body;
   assert.equal(d.tasks.find(x => x.id === t.id).spent, 6.5);
-  // 인건비: 김기록 4h×30000 = 120000, 남은 예상 (10-6.5)=3.5h×30000
-  await call('PATCH', `/projects/${p.id}`, { design_fee: 500000 });
-  const c = (await call('GET', `/projects/${p.id}/time/cost`)).body;
-  assert.equal(c.fee, 500000);
-  assert.equal(c.spent, 120000);
-  assert.equal(c.remain, 105000);
-  assert.ok(c.rows.find(r => r.user_id === me.id).noRate);
   // 휴가: 이번 주 2일 → 근무 가능 40 - 16
   assert.equal((await call('POST', '/leaves', { user_id: k.id, start: '2026-11-26', end: '2026-11-27', kind: '휴가' })).status, 200);
   assert.equal((await call('POST', '/leaves', { start: '2026-11-26', end: '2026-11-27', kind: '반차' })).status, 400);
