@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { addD, fmt, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES } from '../util.js';
+import { addD, fmt, fmtW, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
@@ -72,7 +72,7 @@ function ProjectsPage({ cat }) {
             {(work.meetings || []).filter(t => (!cat || t.category === cat) && t.start <= addDays7(td)).slice(0, 3).map(t => (
               <div key={'m' + t.id} className="item" onClick={() => nav(`/projects/${t.project_id}/schedule?open=${t.id}`)}>
                 <div className="main"><div className="t">👥 <Tx>{t.name}</Tx></div><div className="small">{catOf(t.category).icon} {t.project_name} · {fmt(t.start)} {t.start_time || ''}{t.location ? ` · ${t.location}` : ''}</div></div>
-                <span className="badge b-예정">{t.start === td ? tr('오늘') : fmt(t.start)}</span></div>))}
+                <span className="badge b-예정">{t.start === td ? tr('오늘') : fmtW(t.start)}</span></div>))}
           </div>
         </div>
         <div className="card">
@@ -152,13 +152,16 @@ const addDays7 = d => addD(d, 7);
 // 내 할 일 한 줄 (홈·내 할 일 화면 공통)
 export function MyTaskRow({ t, td, onClick, onDone }) {
   const c = catOf(t.category);
+  // 마감 지난 일은 빨간 줄, 3일 안 마감은 주황 띠, 7일 넘게 남은 일은 회색 배지
+  const left = t.undated || t.state === '완료' ? null : diff(td, t.state === '예정' && t.start !== t.end ? t.start : t.end);
+  const tone = t.state === '지연' ? 'late' : left !== null && left <= 3 ? 'soon' : '';
   return (
-    <div className="item" onClick={onClick}>
+    <div className={`item ${tone ? 'is-' + tone : ''}`} onClick={onClick}>
       {onDone && <input type="checkbox" title={tr('완료 처리')} onClick={e => e.stopPropagation()} onChange={() => onDone(t)} style={{ marginTop: 5 }} />}
       <div className="main"><div className="t">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
-        <div className="small"><span title={tr(c.name)}>{c.icon}</span> {t.project_name}{t.undated ? '' : ` · ${t.start !== t.end ? `${fmt(t.start)}~` : ''}${fmt(t.end)}`}</div></div>
+        <div className="small"><span title={tr(c.name)}>{c.icon}</span> {t.project_name}{t.undated ? '' : ` · ${t.start !== t.end ? `${fmt(t.start)}~` : ''}${t.start !== t.end ? fmt(t.end) : fmtW(t.end)}`}</div></div>
       {t.undated ? <span className={`badge b-${t.state}`}>{tr(t.state)}</span>
-        : <span className={`badge b-${t.state === '지연' ? '지연' : '임박'}`}>{ddayLabel(t, td)}</span>}
+        : <span className={`badge b-${t.state === '지연' ? '지연' : left !== null && left <= 7 ? '임박' : '예정'}`}>{ddayLabel(t, td)}</span>}
     </div>
   );
 }

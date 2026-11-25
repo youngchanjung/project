@@ -6,7 +6,7 @@ import { useApp } from '../App.jsx';
 import History from '../components/History.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS } from '../util.js';
+import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS, statusLabel } from '../util.js';
 import { Tx } from '../contentTr.jsx';
 import { tr } from '../i18n.js';
 import DateInput from '../components/DateInput.jsx';
@@ -188,7 +188,7 @@ function BoardColumns() {
           <tr key={c.id}>
             <td style={{ width: 40 }}>{ed ? <input type="color" value={c.color || '#8a93a6'} onChange={e => call(() => api.patch(`${url}/${c.id}`, { color: e.target.value }))} style={{ width: 30, padding: 0, border: 0 }} /> : <span className="dot" style={{ background: c.color }} />}</td>
             <td>{ed ? <input type="text" defaultValue={tr(c.name)} onBlur={e => e.target.value.trim() && e.target.value !== tr(c.name) && call(() => api.patch(`${url}/${c.id}`, { name: e.target.value }))} /> : <Tx>{tr(c.name)}</Tx>}</td>
-            <td>{ed ? <select value={c.status} onChange={e => call(() => api.patch(`${url}/${c.id}`, { status: e.target.value }))}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select> : tr(c.status)}</td>
+            <td>{ed ? <select value={c.status} onChange={e => call(() => api.patch(`${url}/${c.id}`, { status: e.target.value }))}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(statusLabel(x))}</option>)}</select> : tr(statusLabel(c.status))}</td>
             <td><input type="checkbox" checked={!!c.is_review} disabled={!ed} onChange={e => call(() => api.patch(`${url}/${c.id}`, { is_review: e.target.checked }))} /></td>
             <td className="nw">{ed && <>
               <button className="btn sm" onClick={() => move(c, -1)} disabled={i === 0}>←</button> <button className="btn sm" onClick={() => move(c, 1)} disabled={i === columns.length - 1}>→</button>{' '}

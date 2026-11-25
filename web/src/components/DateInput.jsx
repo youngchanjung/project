@@ -2,8 +2,35 @@
 // 기존 <input type="date"> 자리에 그대로 씁니다. onChange 는 { target: { value } } 형태로 부릅니다.
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { today, monthAdd } from '../util.js';
-import { tr, locale } from '../i18n.js';
+import { today, monthAdd, fmtY, fmtYW } from '../util.js';
+import { tr, locale, getLang } from '../i18n.js';
+import { api } from '../api.js';
+
+// 달력에 보일 공휴일 (날짜 → 이름). 프로젝트 화면이 그 프로젝트의 휴일 달력으로 채움.
+// 프로젝트 밖(홈·관리 등)에서는 한국 공휴일을 한 번 받아 씀
+let HOL = null, HOL_DEFAULT = null, holLoading = false;
+export function setDateHolidays(list) { HOL = list ? new Map(list.map(h => [h.date, h.name.split('/').pop().trim()])) : null; }
+const holidays = () => {
+  if (HOL) return HOL;
+  if (!HOL_DEFAULT && !holLoading) { holLoading = true; api.get('/holidays?country=KR').then(l => { HOL_DEFAULT = new Map(l.map(h => [h.date, h.name.split('/').pop().trim()])); }).catch(() => {}); }
+  return HOL_DEFAULT || new Map();
+};
+
+// 글자로 입력한 날짜 읽기: 2026.11.28 / 2026-11-28 / 20261128 / 11.28(올해). 베트남어 화면은 28/11/2026, 28/11
+export function parseDate(s) {
+  const t = String(s || '').trim();
+  if (!t) return '';
+  let y, m, d;
+  const n = t.match(/\d+/g) || [];
+  if (n.length === 1 && n[0].length === 8) { y = +n[0].slice(0, 4); m = +n[0].slice(4, 6); d = +n[0].slice(6, 8); }
+  else if (n.length >= 3) { if (n[0].length === 4) [y, m, d] = n.map(Number); else if (getLang() === 'vi') [d, m, y] = n.map(Number); else [m, d, y] = n.map(Number); }
+  else if (n.length === 2) { y = +today().slice(0, 4); if (getLang() === 'vi') [d, m] = n.map(Number); else [m, d] = n.map(Number); }
+  else return null;
+  if (y < 100) y += 2000;
+  const dt = new Date(Date.UTC(y, m - 1, d));
+  if (!(m >= 1 && m <= 12 && d >= 1 && d <= 31) || dt.getUTCDate() !== d) return null;
+  return `${y}-${pad(m)}-${pad(d)}`;
+}
 
 const pad = n => String(n).padStart(2, '0');
 const W = () => Math.min(520, window.innerWidth - 16); // 달력 너비(px). 좁은 화면에서는 화면 폭에 맞춤
@@ -12,6 +39,7 @@ export default function DateInput({ value, onChange, title, style, disabled, cla
   const [open, setOpen] = useState(false);
   const [ym, setYm] = useState('');
   const [pos, setPos] = useState(null);
+  const [edit, setEdit] = useState(null); // 글자로 고치는 중인 값 (null 이면 보기 모드)
   const box = useRef(null), pop = useRef(null);
   const v = value || '';
   const emit = x => onChange && onChange({ target: { value: x } });
@@ -38,7 +66,14 @@ export default function DateInput({ value, onChange, title, style, disabled, cla
     return () => { window.removeEventListener('mousedown', down, true); window.removeEventListener('keydown', key, true); window.removeEventListener('resize', re); window.removeEventListener('scroll', re, true); };
   }, [open]); // eslint-disable-line
 
-  const pick = d => { emit(d); setOpen(false); };
+  const pick = d => { emit(d); setEdit(null); setOpen(false); };
+  const commit = () => {
+    if (edit === null) return;
+    const p = parseDate(edit);
+    if (p !== null && p !== v) emit(p);
+    setEdit(null);
+  };
+  const hol = holidays();
   const td = today();
   const [y, m] = ym ? ym.split('-').map(Number) : [0, 0];
   const first = ym ? new Date(Date.UTC(y, m - 1, 1)) : null;
@@ -53,10 +88,16 @@ export default function DateInput({ value, onChange, title, style, disabled, cla
 
   return (
     <span ref={box} className={`dinput ${className || ''}`} style={style}>
-      <input type="date" value={v} title={title} disabled={disabled}
-        onChange={e => emit(e.target.value)}
-        onClick={e => { e.preventDefault(); show(); }}
-        onKeyDown={e => { if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); show(); } }} />
+      <input type="text" className="dinput-t" value={edit !== null ? edit : fmtYW(v)} title={title || tr('예: 2026.11.28')} disabled={disabled}
+        placeholder={getLang() === 'vi' ? 'dd/mm/yyyy' : 'yyyy.mm.dd'} inputMode="numeric"
+        onFocus={() => setEdit(fmtY(v))}
+        onChange={e => setEdit(e.target.value)}
+        onBlur={commit}
+        onClick={() => { if (!open) show(); }}
+        onKeyDown={e => {
+          if (e.key === 'Enter') { e.preventDefault(); commit(); e.currentTarget.blur(); }
+          else if (e.key === 'ArrowDown' && e.altKey) { e.preventDefault(); show(); }
+        }} />
       <button type="button" className="dinput-btn" tabIndex={-1} disabled={disabled} onClick={() => (open ? setOpen(false) : show())} title={tr('달력에서 고르기')}>📅</button>
       {open && createPortal(
         <div ref={pop} className="dpick" style={{ left: pos?.left ?? -9999, top: pos?.top ?? -9999, width: W() }} onMouseDown={e => e.stopPropagation()}>
@@ -68,9 +109,10 @@ export default function DateInput({ value, onChange, title, style, disabled, cla
             <button type="button" className="dpick-nav" onClick={() => setYm(monthAdd(ym, 12))} title={tr('다음 해')}>»</button>
           </div>
           <div className="dpick-g">
-            {wk.map((w, i) => <div key={'w' + i} className={`dpick-w ${i >= 5 ? 'we' : ''}`}>{w}</div>)}
+            {wk.map((w, i) => <div key={'w' + i} className={`dpick-w ${i === 5 ? 'sat' : i === 6 ? 'we' : ''}`}>{w}</div>)}
             {cells.map((d, i) => d
-              ? <button type="button" key={d} className={`dpick-d ${d === v ? 'sel' : ''} ${d === td ? 'td' : ''} ${i % 7 >= 5 ? 'we' : ''}`} onClick={() => pick(d)}>{+d.slice(8)}</button>
+              ? <button type="button" key={d} className={`dpick-d ${d === v ? 'sel' : ''} ${d === td ? 'td' : ''} ${i % 7 === 5 ? 'sat' : ''} ${i % 7 === 6 || hol.has(d) ? 'we' : ''}`} onClick={() => pick(d)} title={hol.get(d) || undefined}>
+                  {+d.slice(8)}{hol.has(d) && <span className="dpick-hn">{hol.get(d)}</span>}</button>
               : <div key={'e' + i} />)}
           </div>
           <div className="dpick-f">
