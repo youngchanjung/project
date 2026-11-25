@@ -32,7 +32,7 @@ export const phaseColor = (phases, id) => {
   return phases[i].color || PALETTE[i % PALETTE.length];
 };
 
-export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의'];
+export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의', '시험'];
 export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const ISSUE_STATUS = ['접수', '검토중', '조치중', '해결완료', '보류'];
 export const PRIORITY = ['상', '중', '하'];
@@ -84,7 +84,7 @@ export function downloadCSV(name, cols, rows) {
 // view: 프로젝트를 열면 먼저 보이는 화면, tabs: 탭 순서
 export const CATEGORIES = [
   { key: 'research', name: '연구', icon: '🔬', color: '#8e5bd8', desc: '회의·시험·보고 일정 중심 (Teams·Outlook 연동 예정)',
-    view: 'calendar', tabs: ['calendar', 'tasks', 'meetings', 'board', 'gantt', 'issues', 'dashboard', 'settings'] },
+    view: 'schedule', tabs: ['schedule', 'tasks', 'meetings', 'board', 'gantt', 'issues', 'dashboard', 'settings'] },
   { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·선행관계·기준 일정',
     view: 'gantt', tabs: ['gantt', 'dashboard', 'calendar', 'tasks', 'issues', 'board', 'meetings', 'settings'] },
   { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
@@ -110,3 +110,11 @@ export function ddayLabel(t, td) {
   const startPhase = st === '예정' && t.start !== t.end;
   return `${tr(startPhase ? '시작' : '마감')} ${ddayTxt(diff(td, startPhase ? t.start : t.end))}`;
 }
+// 회의 참석자 (쉼표로 구분한 계정 id)
+export const attendeeIds = t => String(t.attendees || '').split(',').map(Number).filter(Boolean);
+// 일정 종류별 표시 (연구 일정 화면)
+export const KIND_STYLE = {
+  회의: { icon: '👥', color: '#2f6fde' }, 시험: { icon: '🧪', color: '#8e5bd8' }, 마일스톤: { icon: '◆', color: '#d6453d' },
+  제출: { icon: '📤', color: '#d9822b' }, 검토: { icon: '👀', color: '#159a8c' }
+};
+export const kindOf = t => KIND_STYLE[t.type] || { icon: '•', color: 'var(--plan)' };

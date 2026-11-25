@@ -182,7 +182,16 @@ function MeetingView() {
   const s = m.summary;
   const src = `${tr('회의록')}: ${m.title}${m.held_at ? ` (${m.held_at.slice(0, 10)})` : ''}`;
   const memberId = name => members.find(x => name && (x.name === name || name.includes(x.name)))?.id || '';
-  const asTask = a => openTask(null, { name: a.task.slice(0, 300), owner: a.owner, assignee_id: memberId(a.owner), start: today(), end: a.due && a.due >= today() ? a.due : today(), note: src });
+  // 회의록의 할 일 → 할 일(칸반 첫 열). 기한이 없으면 날짜 없는 할 일로
+  const validDue = d => (d && /^\d{4}-\d{2}-\d{2}$/.test(d) ? d : '');
+  const asTask = a => openTask(null, { name: a.task.slice(0, 300), owner: a.owner, assignee_id: memberId(a.owner), start: validDue(a.due), end: validDue(a.due), note: src });
+  const allAsTasks = async items => {
+    if (!confirm(tr('할 일 {n}건을 한 번에 등록할까요?', { n: items.length }))) return;
+    try {
+      for (const a of items) await api.post(`/projects/${project.id}/tasks`, { name: a.task.slice(0, 300), owner: a.owner || null, assignee_id: memberId(a.owner) || null, start: validDue(a.due) || null, end: validDue(a.due) || null, note: src });
+      toast(tr('할 일 {n}건을 등록했습니다. 칸반·할 일 목록에서 볼 수 있습니다.', { n: items.length }));
+    } catch (e) { toast(e.message); }
+  };
   const asIssue = i => openIssue(null, { title: i.title.slice(0, 300), detail: i.detail, priority: i.priority, source: src, raised: m.held_at?.slice(0, 10) || today() });
 
   return (
@@ -226,7 +235,7 @@ function MeetingView() {
 
       {tab === 'sum' && (edit
         ? <SummaryEditor value={edit} onChange={setEdit} onCancel={() => setEdit(null)} onSave={async () => { if (await patch({ summary: edit })) { setEdit(null); toast(tr('저장했습니다.')); } }} />
-        : s ? <SummaryView s={s} editable={editable} onEdit={() => setEdit(JSON.parse(JSON.stringify(s)))} asTask={asTask} asIssue={asIssue} />
+        : s ? <SummaryView s={s} editable={editable} onEdit={() => setEdit(JSON.parse(JSON.stringify(s)))} asTask={asTask} allAsTasks={allAsTasks} asIssue={asIssue} />
           : <div className="empty">{busy ? '' : caps?.ai ? tr('아직 정리되지 않았습니다. 위의 "AI 정리"를 누르세요.') : tr('AI 정리(Claude) 키가 설정되지 않아 자동 정리는 꺼져 있습니다.')}</div>)}
       {tab === 'tr' && <Transcript m={m} editable={editable} onSpeakers={sp => patch({ speakers: sp })} />}
       {tab === 'notes' && <Notes m={m} editable={editable} onSave={notes => patch({ notes })} />}
@@ -234,7 +243,7 @@ function MeetingView() {
   );
 }
 
-function SummaryView({ s, editable, onEdit, asTask, asIssue }) {
+function SummaryView({ s, editable, onEdit, asTask, allAsTasks, asIssue }) {
   return (
     <div className="grid2">
       <div className="card">
@@ -247,11 +256,11 @@ function SummaryView({ s, editable, onEdit, asTask, asIssue }) {
       <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
         <div className="card"><h3>{tr('결정 사항')} <span className="small">{s.decisions.length}</span></h3>
           {s.decisions.length ? <ul className="mt-ul">{s.decisions.map((d, i) => <li key={i}><Tx>{d}</Tx></li>)}</ul> : <div className="empty">{tr('(없음)')}</div>}</div>
-        <div className="card"><h3>{tr('할 일')} <span className="small">{s.action_items.length}</span></h3>
+        <div className="card"><h3>{tr('할 일')} <span className="small">{s.action_items.length}</span>{editable && s.action_items.length > 1 && <button className="btn sm" style={{ marginLeft: 'auto' }} onClick={() => allAsTasks(s.action_items)}>{tr('모두 할 일로 등록')}</button>}</h3>
           <div className="list">{s.action_items.map((a, i) => (
             <div key={i} className="item" style={{ cursor: 'default' }}>
               <div className="main"><Tx>{a.task}</Tx><div className="small">{[a.owner, a.due].filter(Boolean).join(' · ') || tr('담당·기한 미정')}</div></div>
-              {editable && <button className="btn sm" onClick={() => asTask(a)}>{tr('작업으로 등록')}</button>}
+              {editable && <button className="btn sm" onClick={() => asTask(a)}>{tr('할 일로 등록')}</button>}
             </div>))}
             {!s.action_items.length && <div className="empty">{tr('(없음)')}</div>}</div></div>
         <div className="card"><h3>{tr('이슈')} <span className="small">{s.issues.length}</span></h3>

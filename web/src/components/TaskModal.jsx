@@ -3,7 +3,8 @@ import Modal from './Modal.jsx';
 import History from './History.jsx';
 import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
-import { TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, columnOf } from '../util.js';
+import { TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
+import { useApp } from '../App.jsx';
 import { tr } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
 
@@ -14,10 +15,13 @@ export default function TaskModal({ id, preset, onClose }) {
   const t = id ? tasks.find(x => x.id === id) : null;
   const editable = can();
   const isCons = catOf(project.category).key === 'construction';
+  const { user } = useApp();
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', ...preset };
-  const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end });
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', ...preset };
+  const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
+  const isMeeting = f.type === '회의';
   // "자세히": 선행관계·기준 일정 등 고급 항목. 시공은 기본으로 펼침, 연구·설계는 접어 둠 (선택은 기억)
   const detKey = `task-detail-${isCons ? 'c' : 'x'}`;
   const [det, setDet] = useState(() => { try { const v = localStorage.getItem(detKey); if (v) return v === '1'; } catch {} return isCons; });
@@ -42,6 +46,9 @@ export default function TaskModal({ id, preset, onClose }) {
     for (const k of ['id', 'project_id', 'updated_at', 'updated_by', 'st', 'undated', 'created_at', 'board_order']) delete body[k];
     for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end']) if (body[k] === '') body[k] = null;
     if (body.type === '마일스톤' || body.type === '제출' || body.type === '지급') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
+    if (body.type === '회의') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
+    else { body.start_time = null; body.end_time = null; }
+    for (const k of ['review_state', 'review_note', 'outlook_event_id']) delete body[k];
     if (t && body.board_column_id === (t.board_column_id || '')) delete body.board_column_id; // 열은 칸반에서 바꿈
     if (!body.board_column_id) delete body.board_column_id;
     if (t?.undated && !body.start && !body.end) { delete body.start; delete body.end; } // 날짜 없는 그대로
@@ -71,16 +78,37 @@ export default function TaskModal({ id, preset, onClose }) {
         <span key={k} className={`chip ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{nm}</span>)}</div>}
       {err && <div className="err">{err}</div>}
 
+      {tab === 'info' && t?.review_state && <ReviewBox t={t} canDecide={t.reviewer_id === user.id || can('pm')} members={members} project={project} afterSave={afterSave} setErr={setErr} toast={toast} />}
       {tab === 'info' && <fieldset disabled={!editable} style={{ border: 0, padding: 0, margin: 0 }}>
         <div className="form">
-          <label>{tr('제목 *')}</label><input type="text" value={f.name} onChange={set('name')} autoFocus={!t} placeholder={tr('무엇을 해야 하나요?')} />
+          <label>{tr('제목 *')}</label><input type="text" value={f.name} onChange={set('name')} autoFocus={!t} placeholder={tr(isMeeting ? '예: 주간 연구 회의' : '무엇을 해야 하나요?')} />
           {t && <TxHint text={t.name} />}
-          <label>{tr('담당자')}</label><select value={f.assignee_id} onChange={set('assignee_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
-          <label>{tr('마감일')}</label>
+          {!isCons && <><label>{tr('유형')}</label>
+            <div className="row"><select value={f.type} onChange={set('type')}>{TASK_TYPES.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
+              <label className="small"><input type="checkbox" checked={!!f.is_key} onChange={set('is_key')} /> {tr('핵심 ★')}</label></div></>}
+          {isMeeting && <>
+            <label>{tr('일시')}</label>
+            <div className="row"><input type="date" value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: e.target.value })} />
+              <input type="time" value={f.start_time || ''} onChange={e => setF({ ...f, start_time: e.target.value, end_time: !f.end_time || f.end_time <= e.target.value ? plus1h(e.target.value) : f.end_time })} /> ~
+              <input type="time" value={f.end_time || ''} onChange={set('end_time')} /></div>
+            <label>{tr('장소')}</label><input type="text" value={f.location || ''} onChange={set('location')} placeholder={tr('예: 3층 회의실')} />
+            <label>{tr('회의 링크')}</label><div className="row"><input type="text" value={f.meeting_url || ''} onChange={set('meeting_url')} placeholder="https://teams.microsoft.com/…" style={{ flex: 1 }} />
+              {t?.meeting_url && <a className="btn sm" href={t.meeting_url} target="_blank" rel="noreferrer">{tr('참가')}</a>}</div>
+            <label>{tr('참석자')}</label>
+            <div className="att-list">{members.map(m => (
+              <label key={m.id} className="small"><input type="checkbox" checked={attendeeIds(f).includes(m.id)} onChange={e => {
+                const ids = new Set(attendeeIds(f)); e.target.checked ? ids.add(m.id) : ids.delete(m.id); setF({ ...f, attendees: [...ids].join(',') });
+              }} /> {m.name}</label>))}
+              {!members.length && <span className="small">{tr('프로젝트 참여자가 없습니다.')}</span>}</div>
+            <div className="full small">{tr('참석자에게 프로그램 알림(🔔)이 갑니다. Teams 회의 자동 생성은 M365 연동(3단계)에서 추가됩니다.')}</div>
+          </>}
+          <label>{tr(isMeeting ? '주관' : '담당자')}</label><select value={f.assignee_id} onChange={set('assignee_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+          {!isCons && !isMeeting && <><label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함 · PM이 검토)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></>}
+          {!isMeeting && <><label>{tr(f.type === '마일스톤' || f.type === '제출' ? '날짜' : '마감일')}</label>
           <div className="row"><input type="date" value={f.end || ''} onChange={e => setF({ ...f, end: e.target.value, start: f.start && e.target.value && f.start > e.target.value ? e.target.value : f.start })} />
             {f.end && <button type="button" className="btn sm" onClick={() => setF({ ...f, end: '', start: '' })}>{tr('날짜 지우기')}</button>}
             {!f.end && <span className="small">{tr('비워 두면 날짜 없는 할 일 (간트·달력에는 안 보임)')}</span>}
-            {f.start && f.end && f.start !== f.end && <span className="small">{fmtY(f.start)} ~ · {diff(f.start, f.end) + 1}{tr('일')}</span>}</div>
+            {f.start && f.end && f.start !== f.end && <span className="small">{fmtY(f.start)} ~ · {diff(f.start, f.end) + 1}{tr('일')}</span>}</div></>}
           <label>{tr('상태 · 우선순위')}</label>
           <div className="row"><select value={f.status} onChange={set('status')}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
             <select value={f.priority || '보통'} onChange={set('priority')}>{TASK_PRIORITY.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
@@ -98,13 +126,13 @@ export default function TaskModal({ id, preset, onClose }) {
             <div className="row"><input type="date" value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: !f.end || f.end < e.target.value ? e.target.value : f.end })} />
               {f.start && f.end && <span className="small">{diff(f.start, f.end) + 1}{tr('일')}</span>}</div>
             <label>{tr('단계')}</label><select value={f.phase_id} onChange={set('phase_id')}><option value="">{tr('(없음)')}</option>{phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
-            <label>{tr('ID · 유형')}</label>
+            <label>{tr(isCons ? 'ID · 유형' : 'ID')}</label>
             <div className="row"><input type="text" value={f.code || ''} onChange={set('code')} placeholder={tr('예: 02-D1')} style={{ width: 120 }} />
-              <select value={f.type} onChange={set('type')}>{TASK_TYPES.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
-              <label className="small"><input type="checkbox" checked={!!f.is_key} onChange={set('is_key')} /> {tr('핵심 ★')}</label></div>
+              {isCons && <><select value={f.type} onChange={set('type')}>{TASK_TYPES.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
+              <label className="small"><input type="checkbox" checked={!!f.is_key} onChange={set('is_key')} /> {tr('핵심 ★')}</label></>}</div>
             <label>{tr('작업명 (영문)')}</label><input type="text" value={f.name_en || ''} onChange={set('name_en')} />
             <label>{tr('담당 (기관·사람)')}</label><input type="text" value={f.owner || ''} onChange={set('owner')} placeholder={tr('예: Integra / Space+')} />
-            <label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
+            {isCons && <><label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></>}
             <label>{tr('진행률')}</label>
             <div className="row"><input type="number" min="0" max="100" step="10" value={f.progress} onChange={set('progress')} style={{ width: 80 }} />%
               {f.status === '완료' && <>{tr('실제 완료일')} <input type="date" value={f.actual_end || ''} onChange={set('actual_end')} /></>}</div>
@@ -174,6 +202,30 @@ function Checklist({ t, items, editable, project, reload, setErr, onLocal, local
         </div>))}
       {editable && <input type="text" value={text} placeholder={tr('+ 세부 항목 추가 (Enter)')} onChange={e => setText(e.target.value)}
         onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) { e.preventDefault(); add(); } }} />}
+    </div>
+  );
+}
+
+const plus1h = hm => { if (!hm) return ''; const [h, m] = hm.split(':').map(Number); return h >= 23 ? '23:59' : `${String(h + 1).padStart(2, '0')}:${String(m).padStart(2, '0')}`; };
+
+// 칸반 검토: 검토자(또는 PM)가 승인하면 완료 열로, 반려하면 진행 중 열로
+function ReviewBox({ t, canDecide, members, project, afterSave, setErr, toast }) {
+  const [note, setNote] = useState('');
+  const who = members.find(m => m.id === t.reviewer_id)?.name;
+  const decide = async decision => {
+    try { await afterSave(await api.post(`/projects/${project.id}/tasks/${t.id}/review`, { decision, note })); toast(tr(decision === 'approve' ? '승인했습니다.' : '반려했습니다.')); setNote(''); }
+    catch (e) { setErr(e.message); }
+  };
+  if (t.review_state === 'approved') return <div className="rv-box ok">✓ {tr('검토 승인됨')}{t.review_note ? ` · ${t.review_note}` : ''}</div>;
+  if (t.review_state === 'rejected') return <div className="rv-box rej">↩ {tr('검토 반려됨')}{t.review_note ? ` · ${t.review_note}` : ''}</div>;
+  return (
+    <div className="rv-box">
+      <b>👀 {tr('검토 요청 중')}</b><span className="small">{who ? tr('검토자: {name}', { name: who }) : tr('검토자 미지정 (PM이 검토)')}</span>
+      {canDecide && <>
+        <input type="text" value={note} onChange={e => setNote(e.target.value)} placeholder={tr('의견 (반려 사유 등, 선택)')} style={{ flex: 1, minWidth: 180 }} />
+        <button className="btn" onClick={() => decide('reject')}>↩ {tr('반려')}</button>
+        <button className="btn primary" onClick={() => decide('approve')}>✓ {tr('승인')}</button>
+      </>}
     </div>
   );
 }

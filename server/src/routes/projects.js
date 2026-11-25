@@ -18,7 +18,13 @@ function cleanAgreement(b) {
   if (b.agreement_start && b.agreement_end && b.agreement_end < b.agreement_start) throw new HttpError(400, '협약 종료일이 시작일보다 빠릅니다.');
 }
 // 카테고리별 예시 일정 (새 프로젝트 만들 때 "예시 넣기")
-const mid = (a, b) => { const x = new Date(a + 'T00:00:00Z'), y = new Date(b + 'T00:00:00Z'); return new Date((x.getTime() + y.getTime()) / 2).toISOString().slice(0, 10); };
+// 협약 기간의 가운데 날. 주말이면 앞의 금요일로
+const mid = (a, b) => {
+  const x = new Date(a + 'T00:00:00Z'), y = new Date(b + 'T00:00:00Z');
+  const m = new Date(Math.floor((x.getTime() + y.getTime()) / 2 / 864e5) * 864e5);
+  const back = { 6: 1, 0: 2 }[m.getUTCDay()] || 0;
+  return new Date(m.getTime() - back * 864e5).toISOString().slice(0, 10);
+};
 export function templateTasks(category, p) {
   if (category === 'research') {
     const s = p.agreement_start, e = p.agreement_end;

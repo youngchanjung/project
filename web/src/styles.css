@@ -279,3 +279,29 @@ td input,td select{width:100%;padding:2px 5px;font-size:16px}
 .chk-row .chk-done{text-decoration:line-through;color:var(--muted)}
 .iconbtn.sm{width:24px;height:24px;font-size:16px}
 tr.sel td{background:var(--accent-soft)}
+
+/* ---- 연구 일정 (주·월) ---- */
+.week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));border:1px solid var(--line);border-radius:12px;overflow:hidden;background:var(--panel);min-height:420px}
+.wday{border-left:1px solid var(--line);display:flex;flex-direction:column;min-width:0}
+.wday:first-child{border-left:0}
+.wday.wk{background:var(--wkend)}.wday.hol{background:var(--hol)}
+.wday-h{display:flex;align-items:center;gap:4px;flex-wrap:wrap;padding:6px 8px;border-bottom:1px solid var(--line)}
+.wday.today .wday-h .num{background:var(--accent);color:#fff;border-radius:50%}
+.wday-b{flex:1;padding:6px 5px;display:flex;flex-direction:column;gap:5px}
+.wadd{margin-top:auto;border:1px dashed var(--line);background:none;border-radius:7px;color:var(--muted);cursor:pointer;opacity:0;padding:2px}
+.wday:hover .wadd{opacity:1}
+.sev{border-left:3px solid var(--k);background:color-mix(in srgb,var(--k) 11%,var(--panel));border-radius:6px;padding:4px 6px;cursor:pointer;font-size:14px;display:flex;flex-wrap:wrap;gap:2px 5px;align-items:baseline;min-width:0}
+.sev:hover{background:color-mix(in srgb,var(--k) 20%,var(--panel))}
+.sev.compact{flex-wrap:nowrap;padding:1px 5px;margin-top:2px;font-size:13.5px;overflow:hidden}
+.sev.compact .sev-t{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.sev-time{color:var(--k);font-size:13px}
+.sev-t{min-width:0;word-break:break-word}
+.sev-loc{flex-basis:100%;font-size:12.5px;color:var(--muted)}
+.dday{font-weight:800;font-size:14px;color:var(--muted);white-space:nowrap}.dday.soon{color:var(--soon)}.dday.late{color:var(--late)}
+@media(max-width:800px){.week{grid-template-columns:1fr}.wday{border-left:0;border-top:1px solid var(--line)}.wadd{opacity:1}}
+.rv-box{border:1px solid var(--soon);background:var(--soon-soft);border-radius:9px;padding:10px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
+.rv-box.rej{border-color:var(--late);background:var(--late-soft)}
+.rv-box.ok{border-color:var(--done);background:var(--done-soft)}
+.krev{font-size:12.5px;font-weight:700;border-radius:5px;padding:0 6px;background:var(--soon-soft);color:var(--soon)}
+.krev.rej{background:var(--late-soft);color:var(--late)}
+.att-list{display:flex;flex-wrap:wrap;gap:4px 12px}
