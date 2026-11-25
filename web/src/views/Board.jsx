@@ -1,6 +1,7 @@
 // 칸반 보드: 카드를 끌어서 다른 열에 놓으면 상태가 바뀌고, 같은 열 안에서 끌면 순서가 바뀝니다.
 // 마우스·터치(길게 눌러 끌기)·키보드(스페이스로 집고 화살표로 이동) 지원 — dnd-kit
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   DndContext, DragOverlay, PointerSensor, TouchSensor, KeyboardSensor, useSensor, useSensors,
   closestCorners, useDroppable
@@ -11,17 +12,22 @@ import { useProject } from '../pages/Project.jsx';
 import { useApp } from '../App.jsx';
 import { api } from '../api.js';
 import Dropdown from '../components/Dropdown.jsx';
-import { columnOf, splitTags, PRIORITY_COLOR, personColor, diff, ddayTxt, fmt, fmtW, addD, weekday } from '../util.js';
+import { columnOf, splitTags, PRIORITY_COLOR, personColor, diff, ddayTxt, fmt, fmtW, addD, weekday, phaseRisks, fmtH } from '../util.js';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
 const sortCards = (a, b) => (a.board_order - b.board_order) || (a.id - b.id);
 
 export default function Board() {
-  const { tasks, columns, members, checklist, can, openTask, project, afterSave, toast, td } = useProject();
+  const { tasks, columns, members, checklist, can, openTask, project, afterSave, toast, td, phases, color } = useProject();
   const { user } = useApp();
   const editable = can();
-  const [f, setF] = useState({ q: '', who: '', due: '', tag: '' });
+  const [sp, setSp] = useSearchParams();
+  const [f, setF] = useState(() => ({ q: '', who: '', due: '', tag: '', phase: Number(sp.get('phase')) || '' }));
+  // 알림(🔔 제출일)에서 ?phase=ID 로 들어오면 그 단계만 보기
+  useEffect(() => { const ph = Number(sp.get('phase')); if (ph) { setF(x => ({ ...x, phase: ph })); sp.delete('phase'); setSp(sp, { replace: true }); } }, [sp, setSp]);
+  const risks = useMemo(() => phaseRisks(phases, tasks, td), [phases, tasks, td]);
+  const dueOf = useMemo(() => new Map(phases.filter(p => p.due).map(p => [p.id, p.due])), [phases]);
   const [activeId, setActiveId] = useState(null);
   // 열별 카드 id 목록 (끄는 동안에는 화면에서 먼저 바꿔 보여 줌)
   const base = useMemo(() => {
@@ -47,12 +53,14 @@ export default function Board() {
     if (f.who === 'none' && t.assignee_id) return false;
     if (f.who && !['me', 'none'].includes(f.who) && t.assignee_id !== Number(f.who)) return false;
     if (f.tag && !splitTags(t.tags).includes(f.tag)) return false;
+    if (f.phase && (t.phase_id || -1) !== f.phase) return false;
     if (f.due === 'late' && t.st !== '지연') return false;
     if (f.due === 'week' && (t.undated || t.st === '완료' || t.end > weekEnd)) return false;
     if (f.due === 'none' && !t.undated) return false;
     return true;
   };
-  const filtering = !!(f.q || f.who || f.due || f.tag);
+  const filtering = !!(f.q || f.who || f.due || f.tag || f.phase);
+  const usedPhases = phases.filter(p => tasks.some(t => t.phase_id === p.id));
 
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 6 } }),
@@ -111,10 +119,26 @@ export default function Board() {
           {['', ...allTags].map(v => (
             <label key={v} className="dd-row"><input type="radio" checked={f.tag === v} onChange={() => setF({ ...f, tag: v })} /><span className="t">{v || tr('전체')}</span></label>))}
         </Dropdown>}
-        {filtering && <button className="btn sm" onClick={() => setF({ q: '', who: '', due: '', tag: '' })}>{tr('필터 지우기')}</button>}
+        {usedPhases.length > 0 && <Dropdown label={f.phase ? `${tr('단계')}: ${f.phase === -1 ? tr('단계 없음') : phases.find(p => p.id === f.phase)?.name || ''}` : tr('단계: 전체')} active={!!f.phase}>
+          {[['', tr('전체')], ...usedPhases.map(p => [p.id, p.name]), ...(tasks.some(t => !t.phase_id) ? [[-1, tr('단계 없음')]] : [])].map(([v, n]) => (
+            <label key={v} className="dd-row"><input type="radio" checked={f.phase === v} onChange={() => setF({ ...f, phase: v })} />{v > 0 && <span className="dot" style={{ background: color(v) }} />}<span className="t">{n}</span></label>))}
+        </Dropdown>}
+        {filtering && <button className="btn sm" onClick={() => setF({ q: '', who: '', due: '', tag: '', phase: '' })}>{tr('필터 지우기')}</button>}
         <div className="sp" />
         {editable && <span className="small">{tr('카드를 끌어 다른 열에 놓으면 상태가 바뀝니다.')}</span>}
       </div>
+      {risks.length > 0 && <div className="duebar">
+        {risks.map(r => (
+          <button type="button" key={r.phase.id} className={`duechip ${r.level} ${f.phase === r.phase.id ? 'on' : ''}`} onClick={() => setF({ ...f, phase: f.phase === r.phase.id ? '' : r.phase.id })}
+            title={tr('누르면 이 단계 카드만 보입니다.')}>
+            <span className="dot" style={{ background: color(r.phase.id) }} />
+            <b>{r.phase.name}</b> {tr('제출')} {fmtW(r.phase.due)} · <span className="dd">{ddayTxt(r.n)}</span>
+            {r.level === 'done' ? <span> · ✓ {tr('모두 완료')}</span> : <>
+              <span> · {tr('미완료 {n}건', { n: r.open })}</span>
+              {r.review > 0 && <span> · 👀 {tr('검토 대기 {n}건', { n: r.review })}</span>}
+              {r.after > 0 && <span className="warnx"> · ⚠ {tr('제출일 뒤 마감 {n}건', { n: r.after })}</span>}</>}
+          </button>))}
+      </div>}
       <DndContext sensors={sensors} collisionDetection={closestCorners}
         onDragStart={e => setActiveId(e.active.id)} onDragOver={onDragOver} onDragEnd={onDragEnd} onDragCancel={() => { setActiveId(null); setItems(base); }}>
         <div className="kanban">
@@ -123,12 +147,12 @@ export default function Board() {
             const total = (items[c.id] || []).length;
             return (
               <Column key={c.id} col={c} ids={ids} total={total} filtering={filtering} editable={editable}>
-                {ids.map(id => <Card key={id} t={byId.get(id)} chk={checks.get(id)} members={members} td={td} onOpen={() => openTask(id)} editable={editable} />)}
+                {ids.map(id => <Card key={id} t={byId.get(id)} chk={checks.get(id)} members={members} td={td} pdue={dueOf.get(byId.get(id).phase_id)} onOpen={() => openTask(id)} editable={editable} />)}
               </Column>
             );
           })}
         </div>
-        <DragOverlay>{active ? <CardBody t={active} chk={checks.get(active.id)} members={members} td={td} dragging /> : null}</DragOverlay>
+        <DragOverlay>{active ? <CardBody t={active} chk={checks.get(active.id)} members={members} td={td} pdue={dueOf.get(active.phase_id)} dragging /> : null}</DragOverlay>
       </DndContext>
     </>
   );
@@ -184,18 +208,18 @@ function QuickAdd({ col }) {
   );
 }
 
-function Card({ t, chk, members, td, onOpen, editable }) {
+function Card({ t, chk, members, td, pdue, onOpen, editable }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: t.id, disabled: !editable });
   const style = { transform: CSS.Transform.toString(transform), transition };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`kcard-wrap ${isDragging ? 'ghost' : ''}`}
       onClick={onOpen}>
-      <CardBody t={t} chk={chk} members={members} td={td} />
+      <CardBody t={t} chk={chk} members={members} td={td} pdue={pdue} />
     </div>
   );
 }
 
-function CardBody({ t, chk, members, td, dragging }) {
+function CardBody({ t, chk, members, td, pdue, dragging }) {
   const who = members.find(m => m.id === t.assignee_id);
   const tags = splitTags(t.tags);
   const n = t.undated ? null : diff(td, t.end);
@@ -205,11 +229,13 @@ function CardBody({ t, chk, members, td, dragging }) {
       {(t.priority === '높음' || t.priority === '긴급') && <span className="kprio" style={{ color: PRIORITY_COLOR[t.priority] }}>{t.priority === '긴급' ? '⚡ ' : '▲ '}{tr(t.priority)}</span>}
       {t.review_state === 'requested' && <span className="krev">👀 {tr('검토 요청')}</span>}
       {t.review_state === 'rejected' && t.st !== '완료' && <span className="krev rej" title={t.review_note || ''}>↩ {tr('반려됨')}</span>}
+      {pdue && !t.undated && t.end > pdue && t.st !== '완료' && <span className="krev rej" title={tr('단계 제출일: {date}', { date: fmtW(pdue) })}>⚠ {tr('제출일 뒤')}</span>}
       <div className="kt">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
       {tags.length > 0 && <div className="ktags">{tags.map(x => <span key={x} className="ktag">{x}</span>)}</div>}
       <div className="kmeta">
         {!t.undated && <span className={`kdue ${late ? 'late' : n !== null && n <= 2 && t.st !== '완료' ? 'soon' : ''}`}>📅 {fmtW(t.end)}{t.st !== '완료' && n !== null ? ` · ${ddayTxt(n)}` : ''}</span>}
         {chk && <span className={`kchk ${chk[0] === chk[1] ? 'all' : ''}`}>☑ {chk[0]}/{chk[1]}</span>}
+        {t.est_hours > 0 && <span className="kest" title={tr('예상 시간')}>⏱ {fmtH(t.est_hours)}</span>}
         <span className="sp" />
         {who ? <span className="avatar sm" title={who.name} style={{ background: personColor(who.id) }}>{who.name.slice(0, 1)}</span> : t.owner ? <span className="small">{t.owner}</span> : null}
       </div>

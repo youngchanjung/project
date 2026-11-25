@@ -6,7 +6,7 @@ import { useApp } from '../App.jsx';
 import History from '../components/History.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS, statusLabel } from '../util.js';
+import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS, statusLabel, fmtYW, catOf } from '../util.js';
 import { Tx } from '../contentTr.jsx';
 import { tr } from '../i18n.js';
 import DateInput from '../components/DateInput.jsx';
@@ -19,6 +19,7 @@ export default function Settings() {
       <Members />
       <BoardColumns />
       <Phases />
+      <Templates />
       <ImportExport />
       {can('pm') && <Baseline />}
       <div className="card" style={{ gridColumn: '1/-1' }}><h3>{tr('프로젝트 변경 이력')} <span className="small">{tr('최근 300건')}</span></h3><History /></div>
@@ -148,11 +149,16 @@ function Phases() {
   };
   return (
     <div className="card"><h3>{tr('단계')} <span className="small">{tr('작업을 묶는 단위 (계약·공정·연구 단계)')}</span></h3>
+      {phases.length > 0 && <p className="small" style={{ marginTop: 0 }}>{tr('제출일은 선택 입력입니다. 넣으면 칸반 위에 남은 날과 미완료 건수를 보여 주고, 7일·1일 전과 당일에 알림을 보냅니다.')}</p>}
       {err && <div className="err">{err}</div>}
       <table><tbody>{phases.map((p, i) => (
         <tr key={p.id}>
           <td style={{ width: 40 }}>{ed ? <input type="color" value={color(p.id)} onChange={e => call(() => api.patch(`/projects/${project.id}/phases/${p.id}`, { color: e.target.value }))} style={{ width: 30, padding: 0, border: 0 }} /> : <span className="dot" style={{ background: color(p.id) }} />}</td>
-          <td>{ed ? <input type="text" defaultValue={p.name} onBlur={e => e.target.value !== p.name && call(() => api.patch(`/projects/${project.id}/phases/${p.id}`, { name: e.target.value }))} /> : p.name}</td>
+          <td>{ed ? <input type="text" style={{ width: '100%' }} defaultValue={p.name} onBlur={e => e.target.value !== p.name && call(() => api.patch(`/projects/${project.id}/phases/${p.id}`, { name: e.target.value }))} /> : p.name}
+            <div className="row" style={{ marginTop: 4 }}>
+              <span className="small">{tr('제출일')}</span>
+              {ed ? <DateInput style={{ flexShrink: 0 }} value={p.due || ''} onChange={e => (e.target.value || null) !== (p.due || null) && call(() => api.patch(`/projects/${project.id}/phases/${p.id}`, { due: e.target.value || null }))} />
+                : <span className="small">{p.due ? fmtYW(p.due) : '-'}</span>}</div></td>
           <td className="small nw">{tasks.filter(t => t.phase_id === p.id).length}{tr('건')}</td>
           <td className="nw">{ed && <>
             <button className="btn sm" onClick={() => move(p, -1)} disabled={i === 0}>↑</button> <button className="btn sm" onClick={() => move(p, 1)} disabled={i === phases.length - 1}>↓</button>{' '}
@@ -161,6 +167,41 @@ function Phases() {
       {ed && <div className="toolbar" style={{ marginTop: 10 }}>
         <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={tr('새 단계 이름')} />
         <button className="btn primary" onClick={() => name.trim() && call(async () => { await api.post(`/projects/${project.id}/phases`, { name, color: PALETTE[phases.length % PALETTE.length] }); setName(''); })}>{tr('추가')}</button>
+      </div>}
+    </div>
+  );
+}
+
+// 프로젝트 템플릿: 이 프로젝트의 단계·칸반 열·할 일(체크리스트 포함)을 저장해 새 프로젝트에서 그대로 씀
+function Templates() {
+  const { project, can, toast, tasks } = useProject();
+  const { user } = useApp();
+  const [list, setList] = useState([]);
+  const [name, setName] = useState('');
+  const [err, setErr] = useState(null);
+  const load = () => api.get(`/projects/templates?category=${project.category}`).then(setList).catch(() => {});
+  useEffect(() => { load(); }, [project.category]); // eslint-disable-line
+  const save = async () => {
+    if (!name.trim()) return;
+    try { await api.post(`/projects/${project.id}/templates`, { name }); setName(''); setErr(null); toast(tr('템플릿으로 저장했습니다. 새 프로젝트를 만들 때 고를 수 있습니다.')); load(); }
+    catch (e) { setErr(e.message); }
+  };
+  const del = async t => {
+    if (!confirm(tr("'{name}' 템플릿을 지울까요? 이미 만든 프로젝트에는 영향이 없습니다.", { name: t.name }))) return;
+    try { await api.del(`/projects/templates/${t.id}`); load(); } catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="card"><h3>{tr('프로젝트 템플릿')} <span className="small">{tr(catOf(project.category).name)}</span></h3>
+      {err && <div className="err">{err}</div>}
+      <p className="small" style={{ marginTop: 0 }}>{tr('단계·칸반 열·할 일(체크리스트 포함)을 저장해 두고, 새 프로젝트를 만들 때 그대로 복사합니다. 날짜는 복사하지 않습니다.')}</p>
+      {list.length > 0 ? <table><tbody>{list.map(t => (
+        <tr key={t.id}><td><b>{t.name}</b><div className="small">{t.phases.join(' · ') || tr('단계 없음')} · {tr('할 일 {n}건', { n: t.tasks })}</div></td>
+          <td className="nw">{(user.role === 'admin' || t.created_by === user.id) && <button className="btn sm danger" onClick={() => del(t)}>{tr('삭제')}</button>}</td></tr>))}
+      </tbody></table> : <p className="small">{tr('저장된 템플릿이 없습니다.')}</p>}
+      {can('pm') && <div className="toolbar" style={{ marginTop: 10 }}>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={tr('템플릿 이름 (예: 공동주택 설계)')} />
+        <button className="btn primary" onClick={save} disabled={!name.trim()}>{tr('이 프로젝트를 템플릿으로 저장')}</button>
+        <span className="small">{tr('할 일 {n}건', { n: tasks.filter(t => t.type !== '회의').length })}</span>
       </div>}
     </div>
   );

@@ -5,7 +5,7 @@ import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
 import { normCalendars } from '../countries.js';
 import { stateOf, criticalPath } from '../schedule.js';
 import { insertDefaultColumns } from '../migrations.js';
-import { TASK_STATUS } from './tasks.js';
+import { TASK_STATUS, TASK_TYPES, TASK_PRIORITY } from './tasks.js';
 
 export const projectsRouter = Router();
 projectsRouter.use(requireLogin);
@@ -92,18 +92,96 @@ projectsRouter.post('/', ah(async (req, res) => {
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
     await trx('project_members').insert({ project_id: id, user_id: req.user.id, role: 'pm' });
-    const phases = Array.isArray(req.body.phases) ? req.body.phases : [];
-    for (const [i, name] of phases.entries()) if (name) await trx('phases').insert({ project_id: id, name, sort: i });
-    await insertDefaultColumns(trx, id);
+    const tpl = req.body.template_id ? await trx('project_templates').where({ id: Number(req.body.template_id) }).first() : null;
+    if (req.body.template_id && !tpl) throw new HttpError(400, '템플릿을 찾을 수 없습니다.');
+    if (tpl) await applyTemplate(trx, id, JSON.parse(tpl.data), req.user);
+    else {
+      const phases = Array.isArray(req.body.phases) ? req.body.phases : [];
+      for (const [i, name] of phases.entries()) if (name) await trx('phases').insert({ project_id: id, name, sort: i });
+      await insertDefaultColumns(trx, id);
+    }
     if (req.body.template) {
       for (const [i, t] of templateTasks(body.category, body).entries()) {
         await trx('tasks').insert({ ...t, project_id: id, sort: i + 1, status: '미착수', created_at: now(), updated_at: now(), updated_by: req.user.id });
       }
     }
-    await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'create', label: body.name });
+    await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'create', label: tpl ? `${body.name} (템플릿: ${tpl.name})` : body.name });
     return id;
   });
   res.json(await loadProject(id));
+}));
+
+// ---- 프로젝트 템플릿: 단계·칸반 열·할 일(체크리스트 포함)을 저장해 새 프로젝트에 복사 ----
+// 날짜는 프로젝트마다 다르므로 저장하지 않음 (복사된 할 일은 '날짜 없음'으로 시작)
+async function applyTemplate(trx, projectId, tpl, user) {
+  const phaseIds = [];
+  for (const [i, p] of (tpl.phases || []).entries()) {
+    phaseIds.push(await insertId(trx, 'phases', { project_id: projectId, name: String(p.name || '').slice(0, 100) || `${i + 1}`, color: p.color || null, sort: i }));
+  }
+  const cols = Array.isArray(tpl.columns) && tpl.columns.length ? tpl.columns : null;
+  if (cols) {
+    for (const [i, c] of cols.entries()) {
+      await trx('board_columns').insert({ project_id: projectId, name: String(c.name || '').slice(0, 60) || '-', color: c.color || null,
+        status: TASK_STATUS.includes(c.status) ? c.status : '진행중', is_review: !!c.is_review, sort: i });
+    }
+  } else await insertDefaultColumns(trx, projectId);
+  const first = await trx('board_columns').where({ project_id: projectId }).orderBy('sort').first();
+  const d = now().slice(0, 10);
+  for (const [i, t] of (tpl.tasks || []).entries()) {
+    const tid = await insertId(trx, 'tasks', {
+      project_id: projectId, name: String(t.name || '').slice(0, 300) || '-', type: TASK_TYPES.includes(t.type) ? t.type : '작업',
+      phase_id: Number.isInteger(t.phase) ? phaseIds[t.phase] ?? null : null, priority: TASK_PRIORITY.includes(t.priority) ? t.priority : '보통',
+      tags: t.tags || null, note: t.note || null, est_hours: Number(t.est_hours) > 0 ? Number(t.est_hours) : null, is_key: !!t.is_key,
+      start: d, end: d, undated: true, status: '미착수', board_column_id: first?.status === '미착수' ? first.id : null, board_order: i + 1,
+      sort: i + 1, created_at: now(), updated_at: now(), updated_by: user.id
+    });
+    for (const [j, text] of (t.checklist || []).entries()) if (text) await trx('task_checklist').insert({ task_id: tid, text: String(text).slice(0, 300), sort: j });
+  }
+}
+async function templateOf(projectId) {
+  const [phases, columns, tasks, checks] = await Promise.all([
+    db('phases').where({ project_id: projectId }).orderBy('sort'),
+    db('board_columns').where({ project_id: projectId }).orderBy('sort'),
+    db('tasks').where({ project_id: projectId }).orderBy([{ column: 'sort' }, { column: 'id' }]),
+    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: projectId })).orderBy([{ column: 'task_id' }, { column: 'sort' }])
+  ]);
+  const pidx = new Map(phases.map((p, i) => [p.id, i]));
+  return {
+    phases: phases.map(p => ({ name: p.name, color: p.color })),
+    columns: columns.map(c => ({ name: c.name, color: c.color, status: c.status, is_review: !!c.is_review })),
+    tasks: tasks.filter(t => t.type !== '회의').map(t => ({
+      name: t.name, type: t.type, phase: pidx.has(t.phase_id) ? pidx.get(t.phase_id) : null, priority: t.priority, tags: t.tags || undefined,
+      note: t.note || undefined, est_hours: t.est_hours || undefined, is_key: !!t.is_key || undefined,
+      checklist: checks.filter(c => c.task_id === t.id).map(c => c.text)
+    }))
+  };
+}
+const tplSummary = r => { const d = JSON.parse(r.data); return { id: r.id, name: r.name, category: r.category, created_at: r.created_at, created_by: r.created_by, phases: (d.phases || []).map(p => p.name), tasks: (d.tasks || []).length }; };
+
+projectsRouter.get('/templates', ah(async (req, res) => {
+  const q = db('project_templates').orderBy('name');
+  if (req.query.category) q.where({ category: String(req.query.category) });
+  res.json((await q).map(tplSummary));
+}));
+projectsRouter.post('/:id/templates', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id, 'pm');
+  const p = await loadProject(id);
+  const name = String(req.body?.name || '').trim().slice(0, 100);
+  if (!name) throw new HttpError(400, '템플릿 이름을 입력하세요.');
+  if (await db('project_templates').where({ name, category: p.category }).first()) throw new HttpError(400, '같은 이름의 템플릿이 이미 있습니다.');
+  const data = await templateOf(id);
+  const tid = await insertId(db, 'project_templates', { name, category: p.category, data: JSON.stringify(data), created_at: now(), created_by: req.user.id });
+  await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'template', label: `템플릿으로 저장: ${name} (할 일 ${data.tasks.length}건)` });
+  res.json(tplSummary(await db('project_templates').where({ id: tid }).first()));
+}));
+projectsRouter.delete('/templates/:tid', ah(async (req, res) => {
+  const t = await db('project_templates').where({ id: Number(req.params.tid) }).first();
+  if (!t) throw new HttpError(404, '템플릿을 찾을 수 없습니다.');
+  if (req.user.role !== 'admin' && t.created_by !== req.user.id) throw new HttpError(403, '템플릿은 만든 사람이나 관리자만 지울 수 있습니다.');
+  await db('project_templates').where({ id: t.id }).del();
+  await audit(null, { user: req.user, entity: 'template', entityId: t.id, action: 'delete', label: t.name });
+  res.json({ ok: true });
 }));
 
 // 프로젝트 전체 데이터 (화면에서 한 번에 받아 씀)
@@ -192,14 +270,15 @@ projectsRouter.post('/:id/phases', ah(async (req, res) => {
   await need(req, id, 'pm');
   if (!req.body?.name?.trim()) throw new HttpError(400, '단계 이름을 입력하세요.');
   const { m } = await db('phases').where({ project_id: id }).max({ m: 'sort' }).first();
-  const pid = await insertId(db, 'phases', { project_id: id, name: req.body.name.trim(), color: req.body.color || null, sort: (m ?? -1) + 1 });
+  const pid = await insertId(db, 'phases', { project_id: id, name: req.body.name.trim(), color: req.body.color || null, due: optDate(req.body.due || null, '제출일'), sort: (m ?? -1) + 1 });
   await audit(null, { user: req.user, projectId: id, entity: 'phase', entityId: pid, action: 'create', label: req.body.name });
   res.json(await db('phases').where({ id: pid }).first());
 }));
 projectsRouter.patch('/:id/phases/:pid', ah(async (req, res) => {
   const id = Number(req.params.id), pid = Number(req.params.pid);
   await need(req, id, 'pm');
-  const up = pick(req.body || {}, ['name', 'color', 'sort']);
+  const up = pick(req.body || {}, ['name', 'color', 'sort', 'due']);
+  if (up.due !== undefined) up.due = optDate(up.due || null, '제출일');
   await db('phases').where({ id: pid, project_id: id }).update(up);
   res.json(await db('phases').where({ id: pid }).first());
 }));

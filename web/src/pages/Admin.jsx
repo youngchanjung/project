@@ -89,7 +89,7 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
   const isNew = !u.id;
   const [f, setF] = useState({
     username: u.username || '', name: u.name || '', email: u.email || '', role: u.role || 'user', active: u.active ?? true, password: '',
-    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || ''
+    department_id: u.department_id ?? '', employee_no: u.employee_no || '', position: u.position || '', phone: u.phone || '', weekly_hours: u.weekly_hours ?? 40
   });
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
@@ -115,6 +115,7 @@ function UserModal({ u, me, depts, dn, onClose, onSaved }) {
         <label>{tr('직급·직책')}</label><input type="text" value={f.position} onChange={set('position')} placeholder={tr('예: 책임연구원, 팀장')} />
         <label>{tr('회사 메일')}</label><input type="email" value={f.email} onChange={set('email')} placeholder={tr('M365 로그인 연결에 사용')} />
         <label>{tr('전화')}</label><input type="text" value={f.phone} onChange={set('phone')} />
+        <label>{tr('주당 근무 시간')}</label><div className="row"><input type="number" min="0" max="80" step="1" value={f.weekly_hours} onChange={set('weekly_hours')} style={{ width: 90 }} /><span className="small">{tr('업무량 화면의 기준 (기본 40, 시간제는 줄여서)')}</span></div>
         <label>{tr('권한')}</label><select value={f.role} onChange={set('role')} disabled={u.id === me.id}><option value="user">{tr('일반')}</option><option value="admin">{tr('관리자')}</option></select>
         <label>{tr(isNew ? '초기 비밀번호' : '비밀번호 재설정')}</label><input type="password" value={f.password} onChange={set('password')} placeholder={tr(isNew ? '8자 이상' : '바꿀 때만 입력')} />
         {!isNew && <><label>{tr('사용')}</label><label className="small"><input type="checkbox" checked={f.active} onChange={set('active')} disabled={u.id === me.id} /> {tr('로그인 허용 (퇴사 시 해제)')}</label></>}

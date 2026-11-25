@@ -17,6 +17,7 @@ import { authRouter } from './routes/auth.js';
 import { usersRouter, departmentsRouter } from './routes/org.js';
 import { backupRouter } from './routes/backup.js';
 import { projectsRouter } from './routes/projects.js';
+import { workloadRouter } from './routes/workload.js';
 import { tasksRouter, depsRouter } from './routes/tasks.js';
 import { issuesRouter } from './routes/issues.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
@@ -41,6 +42,7 @@ export function createApp() {
   api.use('/notifications', notificationsRouter);
   api.use('/me', meRouter);
   api.use('/holidays', holidaysRouter);
+  api.use('/workload', workloadRouter);
   api.use('/projects', projectsRouter);
   api.use('/projects/:pid/tasks', tasksRouter);
   api.use('/projects/:pid/deps', depsRouter);

@@ -14,7 +14,7 @@ export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
 const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
   'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
-  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade'];
+  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade', 'est_hours'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ymd = () => new Date().toISOString().slice(0, 10);
 
@@ -51,6 +51,11 @@ function clean(body, partial) {
   if (t.attendees !== undefined) t.attendees = (Array.isArray(t.attendees) ? t.attendees : String(t.attendees || '').split(',')).map(Number).filter(Boolean).join(',') || null;
   if (t.meeting_url !== undefined && t.meeting_url && !/^https?:\/\//i.test(t.meeting_url)) throw new HttpError(400, '회의 링크는 http(s):// 로 시작해야 합니다.');
   if (t.tags !== undefined) t.tags = String(t.tags || '').split(',').map(x => x.trim()).filter(Boolean).join(', ') || null;
+  if (t.est_hours !== undefined) {
+    const h = t.est_hours === '' || t.est_hours === null ? null : Number(t.est_hours);
+    if (h !== null && !(h >= 0 && h <= 2000)) throw new HttpError(400, '예상 시간은 0~2000 사이 숫자로 입력하세요.');
+    t.est_hours = h ? Math.round(h * 10) / 10 : null;
+  }
   if (t.progress !== undefined) t.progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
   for (const f of ['phase_id', 'assignee_id', 'board_column_id', 'reviewer_id']) if (t[f] !== undefined) t[f] = t[f] ? Number(t[f]) : null;
   return t;
