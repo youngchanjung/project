@@ -252,6 +252,7 @@ function Backup() {
         {last
           ? <div className={last.ok ? 'ok' : 'err'}>{tr('최근 백업:')} {fmtDT(last.at)} ({last.by === '예약 작업' ? tr('예약 작업') : last.by}) · {last.ok ? `${tr('성공')}, ${kb(last.size)}` : `${tr('실패')} - ${last.error}`}</div>
           : <div className="err">{tr('아직 백업 기록이 없습니다. 서버 PC에서 register-backup-task.bat 을 관리자 권한으로 실행해 자동 백업을 등록하세요.')}</div>}
+        {last?.files && <p className="small">{tr('첨부·현장 사진')}: {tr('파일 {n}개', { n: last.files.attachments?.files || 0 })} ({kb(last.files.attachments?.bytes || 0)}) · {tr('회의 녹음')}: {tr('파일 {n}개', { n: last.files.meetings?.files || 0 })} ({kb(last.files.meetings?.bytes || 0)}) → {st.dir}{/[\\/]$/.test(st.dir) ? '' : '/'}files</p>}
         <p className="small">{tr('저장 위치:')} {st.dir}{st.copyDir && <><br />{tr('추가 복사:')} {st.copyDir}</>}<br />{tr('최근')} {st.keep}{tr('개 보관')}</p>
         <div className="tablewrap" style={{ maxHeight: 220 }}><table><tbody>{st.files.map(f => (
           <tr key={f.name}><td className="small">{f.name}</td><td className="small nw">{kb(f.size)}</td></tr>))}</tbody></table></div>
