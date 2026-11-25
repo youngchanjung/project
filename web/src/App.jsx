@@ -129,7 +129,7 @@ function SideProjects() {
         <div className="side-sec-h" style={{ cursor: 'default' }}>{tr('카테고리')}</div>
         {CATEGORIES.map(c => {
           const n = live.filter(p => (p.category || 'construction') === c.key).length;
-          return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj"><span className="ico" style={{ width: 20, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
+          return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj scat"><span className="ico" style={{ width: 22, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
         })}
       </div>
       {secs.filter(([, , l]) => l.length).map(([k, name, list]) => (
