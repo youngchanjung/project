@@ -213,7 +213,8 @@ export const meRouter = Router();
 meRouter.use(requireLogin);
 meRouter.get('/work', ah(async (req, res) => {
   const t = new Date().toISOString().slice(0, 10);
-  const projects = await db('projects').where({ archived: false });
+  let projects = await db('projects').where({ archived: false });
+  if (req.user.external) { const mem = new Set((await db('project_members').where({ user_id: req.user.id })).map(m => m.project_id)); projects = projects.filter(p => mem.has(p.id)); }
   const pids = projects.map(p => p.id);
   const pname = new Map(projects.map(p => [p.id, p.name]));
   const pcat = new Map(projects.map(p => [p.id, p.category]));

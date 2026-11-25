@@ -95,7 +95,7 @@ export const CATEGORIES = [
   { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·크리티컬 패스·기준선·룩어헤드',
     view: 'gantt', tabs: ['gantt', 'lookahead', 'tasks', 'progress', 'calendar', 'dashboard', 'issues', 'board', 'meetings', 'settings'] },
   { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
-    view: 'board', tabs: ['board', 'workload', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
+    view: 'board', tabs: ['board', 'plan', 'workload', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
 ];
 // 단계 제출일 위험: 제출일이 있는 단계마다 남은 날·미완료·검토 대기·제출일 뒤 마감 건수
 //   level: late(제출일 지남, 미완료 있음) | warn(7일 안 또는 제출일 뒤 마감 카드) | info(14일 안) | done(모두 완료)

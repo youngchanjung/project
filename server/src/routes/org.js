@@ -15,9 +15,10 @@ const parseRole = v => (/^(admin|관리자)$/i.test(s(v)) ? 'admin' : 'user');
 export const usersRouter = Router();
 usersRouter.use(requireLogin);
 
-usersRouter.get('/', ah(async (_req, res) => {
+usersRouter.get('/', ah(async (req, res) => {
   const rows = await db('users').orderBy('name');
-  res.json(rows.map(publicUser));
+  // 단가는 관리자에게만
+  res.json(rows.map(u => (req.user.role === 'admin' ? { ...publicUser(u), hourly_rate: u.hourly_rate ?? null } : publicUser(u))));
 }));
 
 async function checkDept(id) {
@@ -34,6 +35,13 @@ function weeklyHours(v) {
   if (!(n >= 0 && n <= 80)) throw new HttpError(400, '주당 근무 시간은 0~80 사이로 입력하세요.');
   return n;
 }
+// 시간당 단가 (인건비 예측). 비우면 없음
+function rateOf(v) {
+  if (v === undefined || v === null || v === '') return undefined;
+  const n = Number(v);
+  if (!(n >= 0)) throw new HttpError(400, '단가는 0 이상 숫자로 입력하세요.');
+  return n;
+}
 const optText = v => (v === undefined ? undefined : s(v) || null);
 
 usersRouter.post('/', requireAdmin, ah(async (req, res) => {
@@ -46,7 +54,7 @@ usersRouter.post('/', requireAdmin, ah(async (req, res) => {
     username, name, email: optText(b.email) ?? null, role: parseRole(b.role),
     department_id: (await checkDept(b.department_id)) ?? null,
     employee_no: optText(b.employee_no) ?? null, position: optText(b.position) ?? null, phone: optText(b.phone) ?? null,
-    weekly_hours: weeklyHours(b.weekly_hours) ?? 40,
+    weekly_hours: weeklyHours(b.weekly_hours) ?? 40, hourly_rate: rateOf(b.hourly_rate) ?? null, external: !!b.external,
     password_hash: await hashPassword(b.password), created_at: now()
   });
   await audit(null, { user: req.user, entity: 'user', entityId: id, action: 'create', label: name });
@@ -64,6 +72,8 @@ usersRouter.patch('/:id', requireAdmin, ah(async (req, res) => {
   if (b.department_id !== undefined) up.department_id = await checkDept(b.department_id);
   if (b.role) up.role = parseRole(b.role);
   if (b.weekly_hours !== undefined) up.weekly_hours = weeklyHours(b.weekly_hours) ?? 40;
+  if (b.hourly_rate !== undefined) up.hourly_rate = rateOf(b.hourly_rate) ?? null;
+  if (b.external !== undefined) up.external = !!b.external;
   if (b.active !== undefined) up.active = !!b.active;
   if (b.password) {
     if (b.password.length < 8) throw new HttpError(400, '비밀번호는 8자 이상이어야 합니다.');

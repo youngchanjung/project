@@ -19,7 +19,7 @@ import { Tx } from '../contentTr.jsx';
 const sortCards = (a, b) => (a.board_order - b.board_order) || (a.id - b.id);
 
 export default function Board() {
-  const { tasks, columns, members, checklist, can, openTask, project, afterSave, toast, td, phases, color } = useProject();
+  const { tasks, columns, members, checklist, can, openTask, project, afterSave, toast, td, phases, color, leaves = [] } = useProject();
   const { user } = useApp();
   const editable = can();
   const [sp, setSp] = useSearchParams();
@@ -101,12 +101,20 @@ export default function Board() {
     catch (e) { toast(e.message); setItems(base); }
   };
 
+  // 마감일에 담당자가 휴가(반차 제외)면 표시
+  const leaveOn = t => (t.assignee_id && !t.undated && t.st !== '완료' ? leaves.find(l => l.user_id === t.assignee_id && l.kind !== '반차' && l.start <= t.end && t.end <= l.end) : null);
+  const claim = async t => {
+    try { await afterSave(await api.patch(`/projects/${project.id}/tasks/${t.id}`, { assignee_id: user.id, version: t.version })); toast(tr('내가 맡았습니다: {name}', { name: t.name })); }
+    catch (e) { toast(e.message); }
+  };
   const active = activeId ? byId.get(activeId) : null;
   return (
     <>
       <div className="toolbar">
         <input type="search" className="tsearch" placeholder={tr('할 일·태그 검색')} value={f.q} onChange={e => setF({ ...f, q: e.target.value })} />
         <button type="button" className={`tbtn ${f.who === 'me' ? 'on' : ''}`} onClick={() => setF({ ...f, who: f.who === 'me' ? '' : 'me' })}>{f.who === 'me' ? '✓ ' : ''}{tr('내 카드만')}</button>
+        {editable && <button type="button" className={`tbtn ${f.who === 'none' ? 'on' : ''}`} onClick={() => setF({ ...f, who: f.who === 'none' ? '' : 'none' })} title={tr('담당자가 없는 카드를 모아 봅니다. 카드의 ‘내가 맡기’로 바로 가져갈 수 있습니다.')}>
+          {f.who === 'none' ? '✓ ' : ''}{tr('담당 없음')} <span className="kcnt">{tasks.filter(t => !t.assignee_id && t.st !== '완료' && t.type !== '회의').length}</span></button>}
         <Dropdown label={f.who && f.who !== 'me' ? `${tr('담당')}: ${f.who === 'none' ? tr('없음') : members.find(m => m.id === Number(f.who))?.name || ''}` : tr('담당: 전체')} active={!!f.who && f.who !== 'me'}>
           {[['', tr('전체')], ['none', tr('담당 없음')], ...members.map(m => [String(m.id), m.name])].map(([v, n]) => (
             <label key={v} className="dd-row"><input type="radio" checked={f.who === v} onChange={() => setF({ ...f, who: v })} /><span className="t">{n}</span></label>))}
@@ -127,7 +135,7 @@ export default function Board() {
         <div className="sp" />
         {editable && <span className="small">{tr('카드를 끌어 다른 열에 놓으면 상태가 바뀝니다.')}</span>}
       </div>
-      {risks.length > 0 && <div className="duebar">
+      {!user.external && risks.length > 0 && <div className="duebar">
         {risks.map(r => (
           <button type="button" key={r.phase.id} className={`duechip ${r.level} ${f.phase === r.phase.id ? 'on' : ''}`} onClick={() => setF({ ...f, phase: f.phase === r.phase.id ? '' : r.phase.id })}
             title={tr('누르면 이 단계 카드만 보입니다.')}>
@@ -147,7 +155,7 @@ export default function Board() {
             const total = (items[c.id] || []).length;
             return (
               <Column key={c.id} col={c} ids={ids} total={total} filtering={filtering} editable={editable}>
-                {ids.map(id => <Card key={id} t={byId.get(id)} chk={checks.get(id)} members={members} td={td} pdue={dueOf.get(byId.get(id).phase_id)} onOpen={() => openTask(id)} editable={editable} />)}
+                {ids.map(id => <Card key={id} t={byId.get(id)} chk={checks.get(id)} members={members} td={td} pdue={dueOf.get(byId.get(id).phase_id)} leave={leaveOn(byId.get(id))} onOpen={() => openTask(id)} editable={editable} onClaim={() => claim(byId.get(id))} />)}
               </Column>
             );
           })}
@@ -184,6 +192,7 @@ function Column({ col, ids, total, filtering, editable, children }) {
 
 function QuickAdd({ col }) {
   const { project, afterSave, toast } = useProject();
+  const { user } = useApp();
   const [on, setOn] = useState(false);
   const [name, setName] = useState('');
   const [busy, setBusy] = useState(false);
@@ -197,6 +206,7 @@ function QuickAdd({ col }) {
     catch (e) { toast(e.message); }
     finally { setBusy(false); }
   };
+  if (user.external) return null; // 외부 협력자는 새 카드를 만들지 않음
   if (!on) return <button className="kadd" onClick={() => setOn(true)}>{tr('+ 할 일 추가')}</button>;
   return (
     <div className="kadd-form">
@@ -208,18 +218,20 @@ function QuickAdd({ col }) {
   );
 }
 
-function Card({ t, chk, members, td, pdue, onOpen, editable }) {
+function Card({ t, chk, members, td, pdue, leave, onOpen, editable, onClaim }) {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: t.id, disabled: !editable });
   const style = { transform: CSS.Transform.toString(transform), transition };
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners} className={`kcard-wrap ${isDragging ? 'ghost' : ''}`}
       onClick={onOpen}>
-      <CardBody t={t} chk={chk} members={members} td={td} pdue={pdue} />
+      <CardBody t={t} chk={chk} members={members} td={td} pdue={pdue} leave={leave} />
+      {editable && !t.assignee_id && t.st !== '완료' && <button type="button" className="kclaim" onPointerDown={e => e.stopPropagation()} onKeyDown={e => e.stopPropagation()}
+        onClick={e => { e.stopPropagation(); onClaim(); }}>✋ {tr('내가 맡기')}</button>}
     </div>
   );
 }
 
-function CardBody({ t, chk, members, td, pdue, dragging }) {
+function CardBody({ t, chk, members, td, pdue, leave, dragging }) {
   const who = members.find(m => m.id === t.assignee_id);
   const tags = splitTags(t.tags);
   const n = t.undated ? null : diff(td, t.end);
@@ -229,13 +241,14 @@ function CardBody({ t, chk, members, td, pdue, dragging }) {
       {(t.priority === '높음' || t.priority === '긴급') && <span className="kprio" style={{ color: PRIORITY_COLOR[t.priority] }}>{t.priority === '긴급' ? '⚡ ' : '▲ '}{tr(t.priority)}</span>}
       {t.review_state === 'requested' && <span className="krev">👀 {tr('검토 요청')}</span>}
       {t.review_state === 'rejected' && t.st !== '완료' && <span className="krev rej" title={t.review_note || ''}>↩ {tr('반려됨')}</span>}
+      {leave && <span className="krev" title={`${tr(leave.kind)} ${fmt(leave.start)}~${fmt(leave.end)}`}>🏖 {tr('마감일에 담당자 {kind}', { kind: tr(leave.kind) })}</span>}
       {pdue && !t.undated && t.end > pdue && t.st !== '완료' && <span className="krev rej" title={tr('단계 제출일: {date}', { date: fmtW(pdue) })}>⚠ {tr('제출일 뒤')}</span>}
       <div className="kt">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
       {tags.length > 0 && <div className="ktags">{tags.map(x => <span key={x} className="ktag">{x}</span>)}</div>}
       <div className="kmeta">
         {!t.undated && <span className={`kdue ${late ? 'late' : n !== null && n <= 2 && t.st !== '완료' ? 'soon' : ''}`}>📅 {fmtW(t.end)}{t.st !== '완료' && n !== null ? ` · ${ddayTxt(n)}` : ''}</span>}
         {chk && <span className={`kchk ${chk[0] === chk[1] ? 'all' : ''}`}>☑ {chk[0]}/{chk[1]}</span>}
-        {t.est_hours > 0 && <span className="kest" title={tr('예상 시간')}>⏱ {fmtH(t.est_hours)}</span>}
+        {(t.est_hours > 0 || t.spent > 0) && <span className={`kest ${t.est_hours && t.spent > t.est_hours ? 'over' : ''}`} title={tr('쓴 시간 / 예상 시간')}>⏱ {t.spent > 0 ? `${fmtH(t.spent)}${t.est_hours ? ` / ${fmtH(t.est_hours)}` : ''}` : fmtH(t.est_hours)}</span>}
         <span className="sp" />
         {who ? <span className="avatar sm" title={who.name} style={{ background: personColor(who.id) }}>{who.name.slice(0, 1)}</span> : t.owner ? <span className="small">{t.owner}</span> : null}
       </div>

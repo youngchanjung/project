@@ -380,6 +380,41 @@ const migrations = [
       });
       await k('project_templates').insert({ name: '건축 설계 기본', category: 'design', data: JSON.stringify(BUILTIN_DESIGN_TEMPLATE), created_at: new Date().toISOString() });
     }
+  },
+  {
+    // 설계 2·3순위(11/25): 투입 시간 기록, 휴가·부재, 인건비(단가·설계비), 외부 협력자
+    name: '014_design_time_leave',
+    async up(k) {
+      await k.schema.createTable('time_entries', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.integer('task_id').references('tasks.id').onDelete('SET NULL');
+        t.integer('user_id').notNullable().references('users.id').onDelete('CASCADE');
+        t.string('date', 10).notNullable();
+        t.float('hours').notNullable();
+        t.string('note', 300);
+        t.string('created_at', 32);
+        t.index(['project_id']); t.index(['user_id', 'date']);
+      });
+      await k.schema.createTable('leaves', t => {
+        t.increments('id');
+        t.integer('user_id').notNullable().references('users.id').onDelete('CASCADE');
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.string('kind', 12).notNullable().defaultTo('휴가'); // 휴가 | 반차 | 출장 | 교육 | 기타
+        t.string('note', 200);
+        t.string('created_at', 32);
+        t.integer('created_by');
+        t.index(['user_id']);
+      });
+      await k.schema.alterTable('users', t => {
+        t.float('hourly_rate'); // 시간당 단가 (인건비 예측, 관리자만 봄)
+        t.boolean('external').notNullable().defaultTo(false); // 외부 협력자: 참여 프로젝트의 자기 카드만 봄
+      });
+      await k.schema.alterTable('projects', t => {
+        t.float('design_fee'); // 설계비(예산), 인건비 예측과 비교
+      });
+    }
   }
 ];
 

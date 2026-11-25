@@ -8,6 +8,15 @@ import { notify, recipientsOf } from '../notify.js';
 
 export const tasksRouter = Router({ mergeParams: true });
 tasksRouter.use(requireLogin);
+// 외부 협력자: 자기 카드(담당 또는 검토)만 고칠 수 있음. 새로 만들기·삭제·일괄 작업은 안 됨
+tasksRouter.use(ah(async (req, _res, next) => {
+  if (!req.user.external) return next();
+  const m = req.path.match(/^\/(\d+)(\/|$)/);
+  if (!m || req.method === 'DELETE' && !/\/checklist\//.test(req.path)) throw new HttpError(403, '외부 협력자는 자기 카드만 고칠 수 있습니다.');
+  const t = await db('tasks').where({ id: Number(m[1]), project_id: Number(req.params.pid) }).first();
+  if (!t || (t.assignee_id !== req.user.id && t.reviewer_id !== req.user.id)) throw new HttpError(403, '외부 협력자는 자기 카드만 고칠 수 있습니다.');
+  next();
+}));
 
 export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의', '시험'];
 export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
@@ -180,6 +189,7 @@ tasksRouter.delete('/:tid', ah(async (req, res) => {
     await trx('dependencies').where('pred_id', tid).orWhere('succ_id', tid).del();
     await trx('tasks').where({ parent_id: tid }).update({ parent_id: t.parent_id ?? null }); // 하위 작업은 한 단계 위로
     await trx('issues').where({ task_id: tid }).update({ task_id: null });
+    await trx('time_entries').where({ task_id: tid }).update({ task_id: null }); // 기록한 시간은 남김
     await trx('task_checklist').where({ task_id: tid }).del();
     await trx('tasks').where({ id: tid }).del();
     await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'delete', label: t.name, changes: { start: [t.start, null], end: [t.end, null] } });

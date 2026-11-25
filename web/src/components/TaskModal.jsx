@@ -3,7 +3,7 @@ import Modal from './Modal.jsx';
 import History from './History.jsx';
 import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
-import { statusLabel, TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
+import { statusLabel, TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, fmtW, fmtH, today, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
 import { useApp } from '../App.jsx';
 import { tr } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
@@ -84,7 +84,7 @@ export default function TaskModal({ id, preset, onClose }) {
     <Modal title={t ? `${t.code ? t.code + ' · ' : ''}${t.name}` : tr(isCons ? '새 작업' : '새 할 일')} onClose={onClose} wide>
       {t && <div style={{ marginTop: -6, marginBottom: 10 }}><span className={`badge b-${t.st}`}>{tr(t.st)}</span> {t.st !== '완료' && !t.undated && <span className="badge b-예정">{ddayLabel(t, td)}</span>}
         {preds.length > 0 && <span className="small"> {tr('· 선행작업이 있어 날짜가 자동 계산됩니다')}</span>}</div>}
-      {t && <div className="toolbar">{[['info', tr('정보')], ['deps', `${tr('선행관계')} (${preds.length})`], ['issues', `${tr('관련 이슈')} (${related.length})`], ['hist', tr('변경 이력')]].map(([k, nm]) =>
+      {t && <div className="toolbar">{[['info', tr('정보')], ['deps', `${tr('선행관계')} (${preds.length})`], ['issues', `${tr('관련 이슈')} (${related.length})`], ['time', `${tr('시간 기록')}${t.spent ? ` (${fmtH(t.spent)})` : ''}`], ['hist', tr('변경 이력')]].map(([k, nm]) =>
         <span key={k} className={`chip ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{nm}</span>)}</div>}
       {err && <div className="err">{err}</div>}
 
@@ -201,6 +201,7 @@ export default function TaskModal({ id, preset, onClose }) {
         {editable && <div><button className="btn" onClick={() => { onClose(); openIssue(null, { task_id: t.id }); }}>{tr('+ 이 작업에 이슈 등록')}</button></div>}
       </div>}
 
+      {tab === 'time' && t && <TimeLog t={t} project={project} editable={editable} user={user} members={members} canPm={can('pm')} reload={reload} setErr={setErr} />}
       {tab === 'hist' && t && <History entity="task" entityId={t.id} />}
 
       <div className="actions">
@@ -214,6 +215,38 @@ export default function TaskModal({ id, preset, onClose }) {
 }
 
 // 체크리스트: 저장된 할 일은 바로 서버에 반영, 새 할 일은 저장할 때 함께 등록
+// 투입 시간 기록: 이 카드에 실제로 쓴 시간. 예상 시간과 비교
+function TimeLog({ t, project, editable, user, members, canPm, reload, setErr }) {
+  const [rows, setRows] = useState(null);
+  const [f, setF] = useState({ date: today(), hours: '', note: '', user_id: user.id });
+  const load = () => api.get(`/projects/${project.id}/time?task=${t.id}`).then(setRows).catch(e => setErr(e.message));
+  useEffect(() => { load(); }, [t.id]); // eslint-disable-line
+  const add = async () => {
+    if (!(Number(f.hours) > 0)) return setErr(tr('시간을 입력하세요.'));
+    try { await api.post(`/projects/${project.id}/time`, { ...f, task_id: t.id }); setF({ ...f, hours: '', note: '' }); setErr(null); await load(); reload(); }
+    catch (e) { setErr(e.message); }
+  };
+  const del = async r => { try { await api.del(`/projects/${project.id}/time/${r.id}`); await load(); reload(); } catch (e) { setErr(e.message); } };
+  const sum = (rows || []).reduce((a, r) => a + r.hours, 0);
+  const over = t.est_hours && sum > t.est_hours;
+  return (
+    <div>
+      <p><b className={over ? 'late-t' : ''}>{tr('쓴 시간')} {fmtH(Math.round(sum * 10) / 10)}</b>{t.est_hours ? <span className="small"> / {tr('예상')} {fmtH(t.est_hours)}{over ? ` · ${tr('예상보다 {n} 더 씀', { n: fmtH(Math.round((sum - t.est_hours) * 10) / 10) })}` : ''}</span> : <span className="small"> · {tr('예상 시간을 넣으면 비교해 보여 줍니다.')}</span>}</p>
+      {editable && <div className="toolbar">
+        <DateInput value={f.date} onChange={e => setF({ ...f, date: e.target.value })} />
+        <input type="number" min="0.5" max="24" step="0.5" value={f.hours} onChange={e => setF({ ...f, hours: e.target.value })} placeholder={tr('시간')} style={{ width: 90 }} />
+        {canPm && <select value={f.user_id} onChange={e => setF({ ...f, user_id: Number(e.target.value) })}>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>}
+        <input type="text" value={f.note} onChange={e => setF({ ...f, note: e.target.value })} placeholder={tr('메모 (선택)')} style={{ flex: 1, minWidth: 140 }} onKeyDown={e => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) add(); }} />
+        <button className="btn primary" onClick={add}>{tr('기록')}</button>
+      </div>}
+      {rows === null ? <div className="small">{tr('불러오는 중…')}</div> : rows.length ? <table><tbody>{rows.map(r => (
+        <tr key={r.id}><td className="nw">{fmtW(r.date)}</td><td className="nw">{r.user_name}</td><td className="nw"><b>{fmtH(r.hours)}</b></td><td className="small">{r.note}</td>
+          <td className="nw">{(r.user_id === user.id || canPm) && <button className="btn sm danger" onClick={() => del(r)}>{tr('삭제')}</button>}</td></tr>))}</tbody></table>
+        : <p className="small">{tr('아직 기록이 없습니다.')}</p>}
+    </div>
+  );
+}
+
 function Checklist({ t, items, editable, project, reload, setErr, onLocal, local }) {
   const [text, setText] = useState('');
   const url = t && `/projects/${project.id}/tasks/${t.id}/checklist`;
