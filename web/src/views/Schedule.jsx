@@ -13,10 +13,28 @@ const POINT = ['마일스톤', '제출', '지급', '검토', '홀드포인트'];
 const FILTERS = [['회의', '회의'], ['시험', '시험'], ['ms', '마일스톤·제출'], ['etc', '그 밖의 작업']];
 const groupOf = t => (t.type === '회의' ? '회의' : t.type === '시험' ? '시험' : POINT.includes(t.type) ? 'ms' : 'etc');
 
+// 주 보기에서 띠로 이어 그릴 항목: 여러 날 걸리는 작업·시험·회의 (마일스톤 등 한 점짜리 제외)
+const isSpan = t => !POINT.includes(t.type) && t.start !== t.end;
+// 이번 주에 걸친 띠를 겹치지 않게 줄(lane)에 배치
+function weekBands(ts, d0, d6) {
+  const bands = ts.filter(t => isSpan(t) && t.start <= d6 && t.end >= d0)
+    .sort((a, b) => a.start.localeCompare(b.start) || b.end.localeCompare(a.end))
+    .map(t => { const s = t.start < d0 ? d0 : t.start, e = t.end > d6 ? d6 : t.end; return { t, col: diff(d0, s) + 1, span: diff(s, e) + 1, before: t.start < d0, after: t.end > d6 }; });
+  const laneEnd = [];
+  for (const b of bands) {
+    let l = laneEnd.findIndex(end => end < b.col);
+    if (l < 0) { l = laneEnd.length; laneEnd.push(0); }
+    laneEnd[l] = b.col + b.span - 1; b.lane = l;
+  }
+  return { bands, lanes: laneEnd.length };
+}
+
 // 날짜 d 에 보일 항목: 회의·시험은 기간 안 모든 날, 마일스톤 등은 마감일, 일반 작업은 시작·마감일
-function itemsOn(ts, d) {
+// noSpan: 주 보기처럼 여러 날 항목을 띠로 따로 그릴 때는 빼고 하루짜리만
+function itemsOn(ts, d, noSpan) {
   const out = [];
   for (const t of ts) {
+    if (noSpan && isSpan(t)) continue;
     if (t.type === '회의' || t.type === '시험') { if (t.start <= d && t.end >= d) out.push([t, '']); }
     else if (POINT.includes(t.type)) { if (t.end === d) out.push([t, '']); }
     else if (t.start === d && t.end === d) out.push([t, '']);
@@ -37,6 +55,8 @@ export default function Schedule() {
   useEffect(() => { api.get(`/projects/${project.id}/meetings`).then(r => setMinutes(r.slice(0, 5))).catch(() => {}); }, [project.id]);
   const setM = m => { setMode(m); try { localStorage.setItem('sched-mode', m); } catch {} };
 
+  const [narrow, setNarrow] = useState(() => window.innerWidth <= 800);
+  useEffect(() => { const h = () => setNarrow(window.innerWidth <= 800); window.addEventListener('resize', h); return () => window.removeEventListener('resize', h); }, []);
   const ts = useMemo(() => tasks.filter(t => !t.undated && !off.includes(groupOf(t))), [tasks, off]);
   const hm = new Map(holidays.map(h => [h.date, h.name.split('/').pop().trim()]));
   const monday = d => addD(d, -((weekday(d) + 6) % 7));
@@ -53,6 +73,23 @@ export default function Schedule() {
   const mine = tasks.filter(t => t.st !== '완료' && (t.assignee_id === user.id || attendeeIds(t).includes(user.id)) && t.type !== '회의')
     .sort((a, b) => (a.undated - b.undated) || a.end.localeCompare(b.end)).slice(0, 6);
   const nextMeetings = tasks.filter(t => t.type === '회의' && !t.undated && t.start >= td).sort((a, b) => (a.start + (a.start_time || '')).localeCompare(b.start + (b.start_time || ''))).slice(0, 4);
+
+  // 여러 날 작업 띠 (주 보기). 이번 주 밖으로 이어지면 ◀ ▶ 표시
+  const Band = ({ b }) => {
+    const { t } = b, k = kindOf(t), late = t.st === '지연', done = t.st === '완료';
+    const who = members.find(m => m.id === t.assignee_id);
+    return (
+      <div className={`wband ${late ? 'late' : ''} ${done ? 'done' : ''} ${b.before ? 'cont-l' : ''} ${b.after ? 'cont-r' : ''}`}
+        style={{ '--k': late ? 'var(--late)' : k.color === 'var(--plan)' ? 'var(--accent)' : k.color, gridColumn: `${b.col} / span ${b.span}`, gridRow: b.lane + 2 }}
+        title={`${t.name} · ${fmt(t.start)}~${fmt(t.end)}${who ? ' · ' + who.name : ''}`} onClick={() => openTask(t.id)}>
+        {b.before && <span className="wcont">◀</span>}
+        {k.icon !== '•' && <span className="sev-ico">{k.icon}</span>}
+        <span className="wband-t">{done ? '✓ ' : ''}{t.is_key ? '★' : ''}<Tx>{t.name}</Tx></span>
+        <span className="wband-d">{fmt(t.start)}~{fmt(t.end)}{who ? ` · ${who.name}` : ''}</span>
+        {b.after && <span className="wcont">▶</span>}
+      </div>
+    );
+  };
 
   const Item = ({ t, p, compact }) => {
     const k = kindOf(t);
@@ -91,7 +128,29 @@ export default function Schedule() {
       </div>
       <div className="calwrap">
         <div>
-          {mode === 'week' ? (
+          {mode === 'week' && !narrow ? (() => {
+            const { bands, lanes } = weekBands(ts, days[0], days[6]);
+            return (
+              <div className="week2" style={{ gridTemplateRows: `auto${' auto'.repeat(lanes)} minmax(300px, 1fr)` }}>
+                {days.map((d, i) => {
+                  const wd = weekday(d);
+                  return <div key={'bg' + d} className={`wcol ${wd === 0 || wd === 6 ? 'wk' : ''} ${hm.has(d) ? 'hol' : ''}`} style={{ gridColumn: i + 1, gridRow: '1 / -1' }} onDoubleClick={() => add(d)} />;
+                })}
+                {days.map((d, i) => {
+                  const wd = weekday(d);
+                  return <div key={'h' + d} className={`wday-h ${d === td ? 'today' : ''} ${wd === 6 ? 'sat' : wd === 0 || hm.has(d) ? 'sun' : ''}`} style={{ gridColumn: i + 1, gridRow: 1 }}>
+                    <span>{dow(d)}</span><b className="num">{+d.slice(8)}</b>{hm.has(d) && <span className="holname">{hm.get(d)}</span>}</div>;
+                })}
+                {bands.map(b => <Band key={'b' + b.t.id} b={b} />)}
+                {days.map((d, i) => (
+                  <div key={'d' + d} className="wday-b" style={{ gridColumn: i + 1, gridRow: lanes + 2 }} onDoubleClick={() => add(d)}>
+                    {itemsOn(ts, d, true).map(([t, p]) => <Item key={t.id} t={t} p={p} />)}
+                    {can() && <button className="wadd" onClick={() => add(d)} title={tr('이 날짜에 회의 추가')}>+</button>}
+                  </div>
+                ))}
+              </div>
+            );
+          })() : mode === 'week' ? (
             <div className="week">
               {days.map(d => {
                 const wd = weekday(d), its = itemsOn(ts, d);
@@ -122,7 +181,7 @@ export default function Schedule() {
               })}
             </div>
           )}
-          <div className="small" style={{ marginTop: 6 }}>{tr('👥 회의 · 🧪 시험 · ◆ 마일스톤 · ▶ 시작 · ■ 마감')}{can() ? ` · ${tr('날짜를 두 번 누르면 회의 추가')}` : ''}</div>
+          <div className="small" style={{ marginTop: 6 }}>{tr(mode === 'week' && !narrow ? '👥 회의 · 🧪 시험 · ◆ 마일스톤 · 여러 날 작업은 위쪽 띠' : '👥 회의 · 🧪 시험 · ◆ 마일스톤 · ▶ 시작 · ■ 마감')}{can() ? ` · ${tr('날짜를 두 번 누르면 회의 추가')}` : ''}</div>
         </div>
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
           <div className="card"><h3>{tr('다가오는 마일스톤')}</h3>

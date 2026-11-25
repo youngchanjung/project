@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { useProject } from '../pages/Project.jsx';
 import { api } from '../api.js';
-import { diff, ddayLabel, fmtY, TASK_STATUS, downloadXLSX, taskCols, catOf, splitTags, PRIORITY_COLOR } from '../util.js';
+import { statusLabel, diff, ddayLabel, fmtY, fmtYW, TASK_STATUS, downloadXLSX, taskCols, catOf, splitTags, PRIORITY_COLOR } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
@@ -53,7 +53,7 @@ export default function TaskList() {
   const allOn = ts.length > 0 && ts.every(t => sel.has(t.id));
   const exportCols = isCons ? taskCols({ phases, tasks, deps })
     : [['name', '할 일'], [t => memberName(t.assignee_id), '담당자'], [t => t.undated ? '' : t.end, '마감일'], [t => tr(t.priority), '우선순위'], ['tags', '태그'],
-      [t => { const c = checks.get(t.id); return c ? `${c[0]}/${c[1]}` : ''; }, '체크리스트'], [t => tr(t.status), '상태'], ['actual_end', '완료일'], ['note', '메모']];
+      [t => { const c = checks.get(t.id); return c ? `${c[0]}/${c[1]}` : ''; }, '체크리스트'], [t => tr(statusLabel(t.status)), '상태'], ['actual_end', '완료일'], ['note', '메모']];
 
   return (
     <>
@@ -82,8 +82,9 @@ export default function TaskList() {
           const dd = <td className="nw dd" style={{ color: t.st === '지연' ? 'var(--late)' : undefined }}>{ddayLabel(t, td)}</td>;
           const status = (
             <td className="nw" onClick={e => e.stopPropagation()}>
-              {ed ? <select value={t.status} onChange={e => quick(t, { status: e.target.value })} style={{ width: 'auto' }}>{TASK_STATUS.map(s => <option key={s} value={s}>{tr(s)}</option>)}</select> : tr(t.status)}
-              {' '}<span className={`badge b-${t.st}`}>{tr(t.st)}</span>
+              {ed ? <select value={t.status} onChange={e => quick(t, { status: e.target.value })} style={{ width: 'auto' }}>{TASK_STATUS.map(s => <option key={s} value={s}>{tr(statusLabel(s))}</option>)}</select> : null}
+              {/* 고를 수 있을 때는 '지연'만 경고로 덧붙이고, 아니면 상태 배지 하나만 */}
+              {(!ed || t.st === '지연') && <>{' '}<span className={`badge b-${t.st}`}>{tr(t.st)}</span></>}
             </td>);
           return (
             <tr key={t.id} className={`click ${sel.has(t.id) ? 'sel' : ''}`} onClick={() => openTask(t.id)}>
@@ -93,14 +94,14 @@ export default function TaskList() {
                 <td className="nw"><span className="dot" style={{ background: color(t.phase_id) }} />{phaseName(t.phase_id)}</td>
                 <td>{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx>{t.name_en && <div className="small">{t.name_en}</div>}</td>
                 <td className="nw">{tr(t.type)}</td><td>{t.owner}</td>
-                <td className="nw">{t.undated ? '—' : fmtY(t.start)}</td><td className="nw">{t.undated ? '—' : fmtY(t.end)}</td>
+                <td className="nw">{t.undated ? '—' : fmtYW(t.start)}</td><td className="nw">{t.undated ? '—' : fmtYW(t.end)}</td>
                 {dd}{status}
                 <td className="small">{predOf(t.id)}</td>
                 <td className="small"><Tx>{t.note}</Tx></td>
               </> : <>
                 <td style={{ textDecoration: t.st === '완료' ? 'line-through' : undefined, opacity: t.st === '완료' ? .65 : 1 }}>{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></td>
                 <td className="nw">{memberName(t.assignee_id) || <span className="small">{t.owner}</span>}</td>
-                <td className="nw">{t.undated ? <span className="small">{tr('날짜 없음')}</span> : fmtY(t.end)}</td>
+                <td className="nw">{t.undated ? <span className="small">{tr('날짜 없음')}</span> : fmtYW(t.end)}</td>
                 {dd}
                 <td className="nw" style={{ color: PRIORITY_COLOR[t.priority], fontWeight: t.priority === '긴급' || t.priority === '높음' ? 700 : 400 }}>{tr(t.priority || '보통')}</td>
                 <td>{splitTags(t.tags).map(x => <span key={x} className="ktag">{x}</span>)}</td>

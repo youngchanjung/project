@@ -1,3 +1,4 @@
+import { setDateHolidays } from '../components/DateInput.jsx';
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
 import { NavLink, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
 import { api } from '../api.js';
@@ -34,6 +35,8 @@ export default function Project() {
 
   const reload = useCallback(() => api.get(`/projects/${id}/data`).then(setData).catch(e => setErr(e.message)), [id]);
   useEffect(() => { setData(null); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
+  // 날짜 달력에 이 프로젝트의 공휴일 표시
+  useEffect(() => { setDateHolidays(data?.holidays || null); return () => setDateHolidays(null); }, [data?.holidays]);
   // ?open=ID 로 들어오면 해당 작업/이슈 열기 (홈 화면 링크)
   useEffect(() => {
     const open = sp.get('open');

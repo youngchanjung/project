@@ -5,12 +5,17 @@ export const S = d => d.toISOString().slice(0, 10);
 export const addD = (s, n) => { const d = D(s); d.setUTCDate(d.getUTCDate() + n); return S(d); };
 export const diff = (a, b) => Math.round((D(b) - D(a)) / 864e5);
 export const today = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
-export const fmt = s => s ? `${+s.slice(5, 7)}/${+s.slice(8, 10)}` : '';
-export const fmtY = s => s ? s.replace(/-/g, '.') : '';
+// 날짜 표기 (화면 공통). 한국어·영어: 11/28, 2026.11.28 / 베트남어: 28/11, 28/11/2026
+export const fmt = s => s ? (getLang() === 'vi' ? `${+s.slice(8, 10)}/${+s.slice(5, 7)}` : `${+s.slice(5, 7)}/${+s.slice(8, 10)}`) : '';
+export const fmtY = s => s ? (getLang() === 'vi' ? `${s.slice(8, 10)}/${s.slice(5, 7)}/${s.slice(0, 4)}` : s.replace(/-/g, '.')) : '';
+// 요일을 붙인 표기: 11/28 (토), 2026.11.28 (토)
+export const fmtW = s => s ? `${fmt(s)} (${dow(s)})` : '';
+export const fmtYW = s => s ? `${fmtY(s)} (${dow(s)})` : '';
 // 요일 약칭 (화면 언어에 맞춤: 월 / Th 2 / Mon)
 export const dow = s => new Intl.DateTimeFormat(locale(), { weekday: 'short', timeZone: 'UTC' }).format(D(s));
 export const weekday = s => D(s).getUTCDay();
-export const ddayTxt = n => n === 0 ? 'D-Day' : n > 0 ? `D-${n}` : `D+${-n}`;
+// 남은 날: D-3 / 오늘: D-Day / 지난 날: '2일 지남'
+export const ddayTxt = n => n === 0 ? 'D-Day' : n > 0 ? `D-${n}` : tr('{n}일 지남', { n: -n });
 export const monthAdd = (ym, n) => { const d = D(ym + '-01'); d.setUTCMonth(d.getUTCMonth() + n); return S(d).slice(0, 7); };
 
 export function stateOf(t, td) {
@@ -34,6 +39,8 @@ export const phaseColor = (phases, id) => {
 
 export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의', '시험'];
 export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
+// 화면에 보이는 상태 이름. 저장값 '미착수'는 화면에서 '예정'으로 통일
+export const statusLabel = s => (s === '미착수' ? '예정' : s);
 export const ISSUE_STATUS = ['접수', '검토중', '조치중', '해결완료', '보류'];
 export const PRIORITY = ['상', '중', '하'];
 export const ROLE_NAME = { pm: 'PM', member: '참여자', viewer: '조회자' };
@@ -94,6 +101,9 @@ export const catOf = key => CATEGORIES.find(c => c.key === key) || CATEGORIES[1]
 // 새 프로젝트 기본 단계 (카테고리별 예시)
 export const CATEGORY_PHASES = { research: '1차년도, 2차년도', construction: '준비, 시공, 검사, 준공', design: '' };
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
+// 사람마다 고정된 아바타 색 (계정 번호로 정함)
+export const AVATAR_COLORS = ['#2f6fde', '#16a37a', '#c2410c', '#8b5cf6', '#db2777', '#0e7490', '#a16207', '#4d7c0f', '#be123c', '#475569'];
+export const personColor = id => AVATAR_COLORS[(Number(id) || 0) % AVATAR_COLORS.length];
 export const PRIORITY_COLOR = { 낮음: 'var(--plan)', 보통: 'var(--muted)', 높음: 'var(--soon)', 긴급: 'var(--late)' };
 export const splitTags = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
 // 칸반에서 카드가 보이는 열: 지정된 열이 있으면 그 열, 없으면 상태가 같은 첫 열

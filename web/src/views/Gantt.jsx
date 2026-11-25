@@ -2,15 +2,17 @@ import { useEffect, useRef, useState } from 'react';
 import { api } from '../api.js';
 import { useProject, FilterBar } from '../pages/Project.jsx';
 import Dropdown, { DDCheck, DDRadio } from '../components/Dropdown.jsx';
-import { addD, diff, fmt, weekday, isPoint, downloadXLSX, taskCols } from '../util.js';
+import { addD, diff, fmt, fmtW, dow, weekday, isPoint, downloadXLSX, taskCols } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
-const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--plan)', 보류: 'var(--hold)' };
+const COL = { 완료: 'var(--done)', 지연: 'var(--late)', 진행중: 'var(--prog)', 예정: 'var(--bar-plan)', 보류: 'var(--hold)' };
+// 막대 안을 진행률만큼 진하게, 나머지는 연하게
+const barBg = t => { const c = COL[t.st]; const p = Math.max(0, Math.min(100, Number(t.progress) || 0)); return (t.st === '진행중' || t.st === '지연') && p > 0 && p < 100 ? `linear-gradient(90deg, ${c} ${p}%, color-mix(in srgb, ${c} 38%, var(--panel)) ${p}%)` : c; };
 const ST_ORDER = ['지연', '진행중', '예정', '보류', '완료'];
 // 왼쪽 표의 열 (작업명 다음). [키, 제목, 폭]
-const COLS = [['st', '상태', 110], ['start', '시작일', 140], ['end', '마감일', 140], ['owner', '담당', 130]];
+const COLS = [['st', '상태', 120], ['start', '시작일', 150], ['end', '마감일', 150], ['owner', '담당', 130]];
 const RH = 38;
 const OPT0 = { cols: { st: true, start: true, end: true, owner: false }, base: true, deps: true, lbl: true, group: 'phase' };
 function loadOpt() {
@@ -117,7 +119,7 @@ export default function Gantt() {
       <label className="tcheck"><input type="checkbox" checked={allFolded} onChange={e => setFolded(e.target.checked ? new Set(live.map(gkey)) : new Set())} /> {tr('모두 접기')}</label>
       <Dropdown label={tr('범례')}>
         <div className="legend col">
-          <span><i style={{ background: 'var(--plan)' }} />{tr('예정')}</span><span><i style={{ background: 'var(--prog)' }} />{tr('진행중')}</span>
+          <span><i style={{ background: 'var(--bar-plan)' }} />{tr('예정')}</span><span><i style={{ background: 'var(--prog)' }} />{tr('진행중')}</span>
           <span><i style={{ background: 'var(--late)' }} />{tr('지연')}</span><span><i style={{ background: 'var(--done)' }} />{tr('완료')}</span>
           <span><i style={{ background: 'var(--hold)' }} />{tr('보류')}</span><span>{tr('◆ 마일스톤·제출·지급')}</span>
           <span>{tr('→ 선행관계 (빨간색: 순서가 어긋남)')}</span>
@@ -158,8 +160,10 @@ export default function Gantt() {
   if (zoom !== 'day') scale.push(<div key="today" className="gtoday-tag" style={{ left: x(td) + ppd / 2 }}>{fmt(td)}</div>);
   const grid = zoom === 'month' ? null : { backgroundImage: 'linear-gradient(to right, var(--line) 1px, transparent 1px)', backgroundSize: `${zoom === 'day' ? ppd : 7 * ppd}px 100%` };
 
+  // 표의 날짜: 올해는 11/28 (토), 다른 해는 2027.1.4 (월)
+  const dshow = d => d.slice(0, 4) === td.slice(0, 4) ? fmtW(d) : `${d.slice(0, 4)}.${fmt(d).replace('/', '.')} (${dow(d)})`;
   const cell = (t, k) => k === 'st' ? <span className={`badge b-${t.st}`}><span className="bdot" />{tr(t.st)}</span>
-    : k === 'start' ? t.start : k === 'end' ? (isPoint(t) ? '' : t.end) : t.owner;
+    : k === 'start' ? dshow(t.start) : k === 'end' ? (isPoint(t) ? '' : dshow(t.end)) : t.owner;
   const rows = [], rowOf = new Map();
   for (const g of live) {
     const gt = g.ts, isF = folded.has(gkey(g));
@@ -176,16 +180,16 @@ export default function Gantt() {
       const pt = isPoint(t), lbl = zoom === 'month' || !opt.lbl ? '' : `${fmt(t.start)}${t.end !== t.start ? '~' + fmt(t.end) : ''}`;
       const base = showBase && t.baseline_end && (t.baseline_end !== t.end || (t.baseline_start && t.baseline_start !== t.start));
       rows.push(
-        <div key={t.id} className="grow">
+        <div key={t.id} className={`grow ${t.st === '지연' ? 'late' : ''}`}>
           <div className={`glabel gcells ${t.st === '완료' ? 'done' : ''}`} style={{ width: LW }} onClick={() => openTask(t.id)} title={t.name}>
-            <div className="gc name" style={{ width: NAME_W }}><span className="small">{t.code}</span> {t.is_key ? '★' : ''}<Tx>{t.name}</Tx></div>
+            <div className="gc name" style={{ width: NAME_W }}>{t.st === '완료' && <span className="gdone">✓</span>}<span className="small">{t.code}</span> {t.is_key ? '★' : ''}<Tx>{t.name}</Tx></div>
             {cols.map(([k, , w]) => <div key={k} className={`gc ${k}`} style={{ width: w }}>{cell(t, k)}</div>)}
           </div>
           <div className="gbody" style={{ width: W }}>
             {base && <div className="gbase" style={{ left: x(t.baseline_start || t.baseline_end), width: Math.max(3, (diff(t.baseline_start || t.baseline_end, t.baseline_end) + 1) * ppd) }} title={`${tr('기준 일정')} ${t.baseline_start || ''} ~ ${t.baseline_end}`} />}
             {pt
               ? <div className={`gms ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start) + ppd / 2 - 6, background: COL[t.st] }} title={`${t.name} (${t.start})`} />
-              : <div className={`gbar ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start), width: (diff(t.start, t.end) + 1) * ppd, background: COL[t.st] }} title={`${t.name} (${t.start} ~ ${t.end})${editable ? '\n' + tr('끌어서 옮기고, 양 끝을 끌어 기간을 바꿉니다. 누르면 편집 창이 열립니다.') : ''}`}>
+              : <div className={`gbar ${editable ? 'drag' : ''} ${drag?.id === t.id ? 'dragging' : ''}`} onClick={() => !editable && openTask(t.id)} onPointerDown={e => beginDrag(e, t, 'move')} style={{ left: x(t.start), width: (diff(t.start, t.end) + 1) * ppd, background: barBg(t) }} title={`${t.name} (${t.start} ~ ${t.end})${t.progress ? ` · ${t.progress}%` : ''}${editable ? '\n' + tr('끌어서 옮기고, 양 끝을 끌어 기간을 바꿉니다. 누르면 편집 창이 열립니다.') : ''}`}>
                 {editable && <><i className="gh l" onPointerDown={e => beginDrag(e, t, 'start')} /><i className="gh r" onPointerDown={e => beginDrag(e, t, 'end')} /></>}
               </div>}
             <span className="glbl" style={{ left: (pt ? x(t.start) + ppd / 2 + 12 : x(t.end) + ppd + 6) }}>{lbl}{t.end > (t.baseline_end || t.end) ? <b style={{ color: 'var(--late)' }}> +{diff(t.baseline_end, t.end)}{tr('일')}</b> : null}</span>

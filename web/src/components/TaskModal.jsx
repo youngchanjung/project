@@ -3,7 +3,7 @@ import Modal from './Modal.jsx';
 import History from './History.jsx';
 import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
-import { TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
+import { statusLabel, TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
 import { useApp } from '../App.jsx';
 import { tr } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
@@ -110,10 +110,11 @@ export default function TaskModal({ id, preset, onClose }) {
             {f.end && <button type="button" className="btn sm" onClick={() => setF({ ...f, end: '', start: '' })}>{tr('날짜 지우기')}</button>}
             {!f.end && <span className="small">{tr('비워 두면 날짜 없는 할 일 (간트·달력에는 안 보임)')}</span>}
             {f.start && f.end && f.start !== f.end && <span className="small">{fmtY(f.start)} ~ · {diff(f.start, f.end) + 1}{tr('일')}</span>}</div></>}
-          <label>{tr('상태 · 우선순위')}</label>
-          <div className="row"><select value={f.status} onChange={set('status')}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
-            <select value={f.priority || '보통'} onChange={set('priority')}>{TASK_PRIORITY.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
+          <label>{tr('상태')}</label>
+          <div className="row"><select value={f.status} onChange={set('status')}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(statusLabel(x))}</option>)}</select>
             {t && columns.length > 0 && <span className="small">{tr('칸반 열')}: {tr(columns.find(c => c.id === columnOf(t, columns))?.name || '')}</span>}</div>
+          <label>{tr('우선순위')}</label>
+          <div className="row"><select value={f.priority || '보통'} onChange={set('priority')}>{TASK_PRIORITY.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select></div>
           <label>{tr('태그')}</label><input type="text" value={f.tags || ''} onChange={set('tags')} placeholder={tr('쉼표로 구분 (예: 평면, 입면, 구조)')} />
           <label>{tr('메모')}</label><textarea value={f.note || ''} onChange={set('note')} />
           {t && <TxHint text={t.note} />}

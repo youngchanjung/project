@@ -11,7 +11,7 @@ import { useProject } from '../pages/Project.jsx';
 import { useApp } from '../App.jsx';
 import { api } from '../api.js';
 import Dropdown from '../components/Dropdown.jsx';
-import { columnOf, splitTags, PRIORITY_COLOR, diff, ddayTxt, fmt, addD, weekday } from '../util.js';
+import { columnOf, splitTags, PRIORITY_COLOR, personColor, diff, ddayTxt, fmt, fmtW, addD, weekday } from '../util.js';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
@@ -134,12 +134,15 @@ export default function Board() {
   );
 }
 
+// 열 색: 직접 정한 색이 없으면 상태에 맞춰 (할 일 회색, 진행 중 파랑, 검토 주황, 완료 초록)
+const colColor = c => c.color || (c.is_review ? 'var(--soon)' : { 진행중: 'var(--prog)', 완료: 'var(--done)', 보류: 'var(--hold)' }[c.status] || 'var(--bar-plan)');
+
 function Column({ col, ids, total, filtering, editable, children }) {
   const { setNodeRef, isOver } = useDroppable({ id: col.id });
   return (
     <section className={`kcol ${isOver ? 'over' : ''}`}>
-      <header className="kcol-h">
-        <span className="dot" style={{ background: col.color || 'var(--plan)' }} />
+      <header className="kcol-h" style={{ '--cc': colColor(col) }}>
+        <span className="dot" style={{ background: colColor(col) }} />
         <b><Tx>{tr(col.name)}</Tx></b>
         <span className="kcnt">{filtering ? `${ids.length}/${total}` : total}</span>
         {col.is_review && <span className="small" title={tr('검토 열: 검토자 알림은 2단계에서 추가됩니다.')}>👀</span>}
@@ -198,17 +201,17 @@ function CardBody({ t, chk, members, td, dragging }) {
   const n = t.undated ? null : diff(td, t.end);
   const late = t.st === '지연';
   return (
-    <div className={`kcard ${dragging ? 'dragging' : ''} ${t.st === '완료' ? 'done' : ''}`}>
+    <div className={`kcard ${dragging ? 'dragging' : ''} ${t.st === '완료' ? 'done' : ''} ${late ? 'is-late' : t.st !== '완료' && (t.priority === '높음' || t.priority === '긴급') ? 'p-high' : ''}`}>
       {(t.priority === '높음' || t.priority === '긴급') && <span className="kprio" style={{ color: PRIORITY_COLOR[t.priority] }}>{t.priority === '긴급' ? '⚡ ' : '▲ '}{tr(t.priority)}</span>}
       {t.review_state === 'requested' && <span className="krev">👀 {tr('검토 요청')}</span>}
       {t.review_state === 'rejected' && t.st !== '완료' && <span className="krev rej" title={t.review_note || ''}>↩ {tr('반려됨')}</span>}
       <div className="kt">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
       {tags.length > 0 && <div className="ktags">{tags.map(x => <span key={x} className="ktag">{x}</span>)}</div>}
       <div className="kmeta">
-        {!t.undated && <span className={`kdue ${late ? 'late' : n !== null && n <= 2 && t.st !== '완료' ? 'soon' : ''}`}>📅 {fmt(t.end)}{t.st !== '완료' && n !== null ? ` · ${ddayTxt(n)}` : ''}</span>}
+        {!t.undated && <span className={`kdue ${late ? 'late' : n !== null && n <= 2 && t.st !== '완료' ? 'soon' : ''}`}>📅 {fmtW(t.end)}{t.st !== '완료' && n !== null ? ` · ${ddayTxt(n)}` : ''}</span>}
         {chk && <span className={`kchk ${chk[0] === chk[1] ? 'all' : ''}`}>☑ {chk[0]}/{chk[1]}</span>}
         <span className="sp" />
-        {who ? <span className="avatar sm" title={who.name}>{who.name.slice(0, 1)}</span> : t.owner ? <span className="small">{t.owner}</span> : null}
+        {who ? <span className="avatar sm" title={who.name} style={{ background: personColor(who.id) }}>{who.name.slice(0, 1)}</span> : t.owner ? <span className="small">{t.owner}</span> : null}
       </div>
     </div>
   );

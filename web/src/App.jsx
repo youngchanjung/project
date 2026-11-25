@@ -1,16 +1,31 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { PALETTE, CATEGORIES } from './util.js';
+import { PALETTE, CATEGORIES, personColor } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
-import Home, { CategoryPage } from './pages/Home.jsx';
+import Home, { CategoryPage, ProjectsHome } from './pages/Home.jsx';
 import MyTasks from './pages/MyTasks.jsx';
 import Project from './pages/Project.jsx';
 import Admin from './pages/Admin.jsx';
 import Modal from './components/Modal.jsx';
 import { tr, LANGS, getLang, setLang } from './i18n.js';
 import { initContentTr, setContentTr, useContentTrState } from './contentTr.jsx';
+
+// 글씨 크기 (이 브라우저에 기억). 기본은 '크게' = 지금 크기
+const FONT_SIZES = [['0.8', '작게'], ['0.9', '보통'], ['1', '크게']];
+const applyFont = v => { document.documentElement.style.setProperty('--fs', v); };
+const savedFont = () => { try { const v = localStorage.getItem('font-scale'); if (FONT_SIZES.some(f => f[0] === v)) return v; } catch {} return '1'; };
+applyFont(savedFont());
+function FontSelect() {
+  const [v, setV] = useState(savedFont);
+  const change = e => { const n = e.target.value; setV(n); applyFont(n); try { localStorage.setItem('font-scale', n); } catch {} };
+  return (
+    <select value={v} onChange={change} title={tr('글씨 크기')} aria-label={tr('글씨 크기')} style={{ width: 'auto' }}>
+      {FONT_SIZES.map(([k, n]) => <option key={k} value={k}>{tr('글씨')} {tr(n)}</option>)}
+    </select>
+  );
+}
 
 const Ctx = createContext(null);
 export const useApp = () => useContext(Ctx);
@@ -61,6 +76,7 @@ export default function App() {
           <nav className="side-nav">
             <NavLink to="/" end className="snav"><span className="ico">🏠</span>{tr('홈')}</NavLink>
             <NavLink to="/my" className="snav"><span className="ico">✅</span>{tr('내 할 일')}</NavLink>
+            <NavLink to="/projects" end className="snav"><span className="ico">📁</span>{tr('프로젝트')}</NavLink>
             {user.role === 'admin' && <NavLink to="/admin" className="snav"><span className="ico">⚙️</span>{tr('관리')}</NavLink>}
           </nav>
           <SideProjects />
@@ -71,16 +87,18 @@ export default function App() {
             {!side && <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 펼치기')}>☰</button>}
             {!side && <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>}
             <div className="sp" />
+            <FontSelect />
             <LangSelect lang={lang} onChange={changeLang} />
             <ContentTrToggle />
             <Bell />
-            <span className="me"><span className="avatar">{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
+            <span className="me"><span className="avatar" style={{ background: personColor(user.id) }}>{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
             <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
             <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
           </header>
           <Routes key={lang}>
             <Route path="/" element={<Home />} />
             <Route path="/my" element={<MyTasks />} />
+            <Route path="/projects" element={<ProjectsHome />} />
             <Route path="/c/:cat" element={<CategoryPage />} />
             <Route path="/projects/:id/*" element={<Project />} />
             <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
@@ -138,7 +156,7 @@ function SideProjects() {
           {open[k] !== false && list.map(p => (
             <NavLink key={p.id} to={`/projects/${p.id}`} className="sproj" title={`${tr(CATEGORIES.find(c => c.key === (p.category || 'construction')).name)} · ${p.name}`}>
               <span className="sq" style={{ background: CATEGORIES.find(c => c.key === (p.category || 'construction')).color }} /><span className="t">{p.name}</span>
-              {p.stats?.late > 0 && <span className="cnt" title={tr('기한 초과 작업')}>{p.stats.late}</span>}
+              {p.stats?.late > 0 && <span className="cnt" title={tr('기한 초과 작업')}>{tr('지연 {n}', { n: p.stats.late })}</span>}
             </NavLink>
           ))}
         </div>
