@@ -8,7 +8,7 @@ import { Router } from 'express';
 import crypto from 'node:crypto';
 import { db } from '../db.js';
 import { ah, HttpError } from '../util.js';
-import { requireLogin } from '../auth.js';
+import { requireLogin, visibleProjects, projectRole } from '../auth.js';
 import { stateOf, addDays } from '../schedule.js';
 import { translateMsg } from '../i18n.js';
 
@@ -27,7 +27,7 @@ async function tokenOf(user, reset) {
 // PUBLIC_URL(.env)을 정하면 그 주소로, 아니면 지금 접속한 주소로 만듦 (서버 PC에서 localhost 로 열었을 때 대비)
 const base = req => (process.env.PUBLIC_URL || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
 const feedInfo = async (req, token) => {
-  const projects = await db('projects').where({ archived: false }).orderBy('name').select('id', 'name', 'code');
+  const projects = await visibleProjects(req.user, await db('projects').where({ archived: false }).orderBy('name').select('id', 'name', 'code', 'category'));
   return {
     mine: `${base(req)}/ics/${token}/mine.ics`,
     projects: projects.map(p => ({ id: p.id, name: p.name, code: p.code, url: `${base(req)}/ics/${token}/project-${p.id}.ics` }))
@@ -133,7 +133,7 @@ icsRouter.get('/:token/:file', ah(async (req, res) => {
   } else {
     const m = req.params.file.match(/^project-(\d+)\.ics$/);
     const pid = m && Number(m[1]);
-    if (!pid || !pname.has(pid)) throw new HttpError(404, '프로젝트가 없습니다.');
+    if (!pid || !pname.has(pid) || !(await projectRole(u, pid))) throw new HttpError(404, '프로젝트가 없습니다.');
     const tasks = await db('tasks').where({ project_id: pid, undated: false });
     name = pname.get(pid);
     events = tasks.map(t => taskEvent(t, { req, lang, pname: null, phase: phases.get(t.phase_id), today }));

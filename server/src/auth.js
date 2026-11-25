@@ -50,13 +50,42 @@ export function requireAdmin(req, res, next) {
   next();
 }
 
+// 부서별로 볼 수 있는 카테고리. 내 부서에 정해져 있지 않으면 상위 부서를 따르고, 끝까지 없으면 전부(null)
+// 관리자는 항상 전부. 참여 중인 프로젝트는 카테고리와 상관없이 볼 수 있음
+export async function allowedCategories(user) {
+  if (!user || user.role === 'admin' || !user.department_id) return null;
+  if (user._cats !== undefined) return user._cats;
+  const all = await db('departments').select('id', 'parent_id', 'categories');
+  const byId = new Map(all.map(d => [d.id, d]));
+  let cats = null;
+  for (let d = byId.get(user.department_id), n = 0; d && n < 100; d = byId.get(d.parent_id), n++) {
+    if (d.categories) { cats = new Set(String(d.categories).split(',').map(x => x.trim()).filter(Boolean)); break; }
+  }
+  user._cats = cats;
+  return cats;
+}
+// 목록 필터: 참여 중이거나 볼 수 있는 카테고리의 프로젝트만
+export async function visibleProjects(user, projects) {
+  if (!user || user.role === 'admin') return projects;
+  const cats = user.external ? new Set() : await allowedCategories(user);
+  if (!cats) return projects;
+  const mem = new Set((await db('project_members').where({ user_id: user.id })).map(m => m.project_id));
+  return projects.filter(p => mem.has(p.id) || cats.has(p.category));
+}
+
 // 프로젝트 내 역할: admin 은 모든 프로젝트에서 pm 과 같음. 비참여자는 조회만.
 export async function projectRole(user, projectId) {
   if (!user) return null;
   if (user.role === 'admin') return 'pm';
   const m = await db('project_members').where({ project_id: projectId, user_id: user.id }).first();
   if (user.external) return m ? m.role : null; // 외부 협력자는 참여 프로젝트만
-  return m ? m.role : 'viewer';
+  if (m) return m.role;
+  const cats = await allowedCategories(user);
+  if (cats) {
+    const p = await db('projects').where({ id: projectId }).select('category').first();
+    if (p && !cats.has(p.category)) return null; // 부서에서 볼 수 없는 카테고리
+  }
+  return 'viewer';
 }
 const RANK = { viewer: 0, member: 1, pm: 2 };
 export const canEdit = (role, need = 'member') => !!role && RANK[role] >= RANK[need];

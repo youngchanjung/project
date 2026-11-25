@@ -97,6 +97,8 @@ export const CATEGORIES = [
   { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
     view: 'board', tabs: ['board', 'plan', 'workload', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
 ];
+// 부서에서 볼 수 있는 카테고리인지 (user.categories 가 없으면 전부). 참여 프로젝트가 있는 카테고리는 따로 보여 줌
+export const catAllowed = (user, key) => !user?.categories || user.categories.includes(key);
 // 단계 제출일 위험: 제출일이 있는 단계마다 남은 날·미완료·검토 대기·제출일 뒤 마감 건수
 //   level: late(제출일 지남, 미완료 있음) | warn(7일 안 또는 제출일 뒤 마감 카드) | info(14일 안) | done(모두 완료)
 export function phaseRisks(phases, tasks, td) {

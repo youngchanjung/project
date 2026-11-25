@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { addD, fmt, fmtW, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES } from '../util.js';
+import { addD, fmt, fmtW, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES, catAllowed } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
@@ -140,7 +140,7 @@ function ProjectsPage({ cat }) {
   const [creating, setCreating] = useState(false);
   const [subscribing, setSubscribing] = useState(false);
   const nav = useNavigate();
-  const { toast } = useApp();
+  const { toast, user } = useApp();
   const load = () => { api.get('/projects').then(setProjects); api.get('/me/work').then(setWork); };
   useEffect(load, []);
 
@@ -201,6 +201,7 @@ function ProjectsPage({ cat }) {
         {CATEGORIES.map(c => {
           const ps = live.filter(p => (p.category || 'construction') === c.key);
           const mine = work.tasks.filter(t => t.category === c.key);
+          if (!ps.length && !mine.length && !catAllowed(user, c.key)) return null;
           return (
             <Link key={c.key} to={`/c/${c.key}`} className="card catcard" style={{ '--c': c.color }}>
               <div className="cc-h"><span className="cc-ico">{c.icon}</span><b>{tr(c.name)}</b><span className="small">{tr('프로젝트 {n}개', { n: ps.length })}</span></div>
@@ -275,7 +276,8 @@ export function MyTaskRow({ t, td, onClick, onDone }) {
 }
 
 function NewProject({ category, onClose, onDone }) {
-  const { toast } = useApp();
+  const { toast, user } = useApp();
+  const cats = CATEGORIES.filter(c => catAllowed(user, c.key));
   const [f, setF] = useState({ category: category || '', name: '', code: '', client: '', description: '', calendars: 'KR', day_basis: 'workday', phases: '', agreement_start: '', agreement_end: '', partners: '', template: true });
   const [more, setMore] = useState(false);
   const [tpls, setTpls] = useState([]);
@@ -283,7 +285,7 @@ function NewProject({ category, onClose, onDone }) {
   const pickCat = k => { setF({ ...f, category: k, phases: tr(CATEGORY_PHASES[k] || '') }); setTplId(''); };
   useEffect(() => { if (f.category) api.get(`/projects/templates?category=${f.category}`).then(setTpls).catch(() => setTpls([])); else setTpls([]); }, [f.category]);
   const tpl = tpls.find(t => t.id === Number(tplId));
-  useEffect(() => { if (category) pickCat(category); }, []); // eslint-disable-line
+  useEffect(() => { if (category && catAllowed(user, category)) pickCat(category); else if (cats.length === 1) pickCat(cats[0].key); }, []); // eslint-disable-line
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.value });
   const save = async () => {
@@ -298,7 +300,7 @@ function NewProject({ category, onClose, onDone }) {
     <Modal title={tr('새 프로젝트')} onClose={onClose}>
       {err && <div className="err">{err}</div>}
       <div className="catpick">
-        {CATEGORIES.map(c => (
+        {cats.map(c => (
           <button type="button" key={c.key} className={`catopt ${f.category === c.key ? 'on' : ''}`} style={{ '--c': c.color }} onClick={() => pickCat(c.key)}>
             <span className="cc-ico">{c.icon}</span><b>{tr(c.name)}</b><span className="small">{tr(c.desc)}</span>
           </button>))}
