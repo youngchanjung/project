@@ -287,6 +287,27 @@ const migrations = [
       });
       for (const p of await k('projects').select('id')) await insertDefaultColumns(k, p.id);
     }
+  },
+  {
+    // 2단계(연구 일정): 회의 시각·장소·참석자·링크, 칸반 검토 흐름, 연구 과제 정보
+    name: '010_research_schedule',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('start_time', 5); // HH:MM (회의 등 시각이 있는 일정)
+        t.string('end_time', 5);
+        t.string('location', 200);
+        t.text('attendees'); // 참석자 계정 id 쉼표 구분
+        t.string('meeting_url', 500); // Teams 회의 링크 (3단계에서 자동 생성 예정)
+        t.string('outlook_event_id', 200); // 3단계 Outlook 동기화용
+        t.string('review_state', 12); // requested | approved | rejected
+        t.text('review_note');
+      });
+      await k.schema.alterTable('projects', t => {
+        t.string('agreement_start', 10); // 연구: 협약 기간
+        t.string('agreement_end', 10);
+        t.string('partners', 300); // 연구: 협력 기관
+      });
+    }
   }
 ];
 

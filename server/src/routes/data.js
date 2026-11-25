@@ -204,5 +204,11 @@ meRouter.get('/work', ah(async (req, res) => {
     .filter(x => x.state !== '완료');
   const issues = (await db('issues').whereIn('project_id', pids).whereNot('status', '해결완료').andWhere(q => q.where('assignee_id', req.user.id).orWhere('owner', 'like', `%${name}%`)))
     .map(x => ({ ...x, project_name: pname.get(x.project_id) }));
-  res.json({ today: t, tasks, issues });
+  // 내가 검토할 카드, 내가 참석하는 회의(오늘 이후)
+  const reviews = (await db('tasks').whereIn('project_id', pids).where({ reviewer_id: req.user.id, review_state: 'requested' }))
+    .map(x => ({ ...x, undated: !!x.undated, project_name: pname.get(x.project_id), category: pcat.get(x.project_id), state: stateOf(x, t) }));
+  const meetings = (await db('tasks').whereIn('project_id', pids).where({ type: '회의', undated: false }).andWhere('start', '>=', t).orderBy([{ column: 'start' }, { column: 'start_time' }]))
+    .filter(x => String(x.attendees || '').split(',').map(Number).includes(req.user.id))
+    .map(x => ({ ...x, project_name: pname.get(x.project_id), category: pcat.get(x.project_id) }));
+  res.json({ today: t, tasks, issues, reviews, meetings });
 }));

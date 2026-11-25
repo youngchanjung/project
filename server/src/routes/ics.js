@@ -59,8 +59,13 @@ function calendar(name, events) {
   const L = ['BEGIN:VCALENDAR', 'VERSION:2.0', 'PRODID:-//RnD Schedule//KO', 'CALSCALE:GREGORIAN', 'METHOD:PUBLISH',
     `X-WR-CALNAME:${esc(name)}`, 'X-WR-TIMEZONE:Asia/Seoul', 'REFRESH-INTERVAL;VALUE=DURATION:PT1H', 'X-PUBLISHED-TTL:PT1H'];
   for (const e of events) {
-    L.push('BEGIN:VEVENT', `UID:${e.uid}`, `DTSTAMP:${stamp(e.updated)}`, `DTSTART;VALUE=DATE:${ymd(e.start)}`, `DTEND;VALUE=DATE:${ymd(addDays(e.end, 1))}`,
-      `SUMMARY:${esc(e.summary)}`, `DESCRIPTION:${esc(e.description)}`, `SEQUENCE:${e.seq || 0}`, 'TRANSP:TRANSPARENT');
+    // 시각이 있는 회의는 시각 일정(회사 시간대 기준, 끝 시각이 없으면 1시간), 그 밖에는 하루 종일 일정
+    const when = e.time
+      ? [`DTSTART:${ymd(e.start)}T${e.time.replace(':', '')}00`, `DTEND:${ymd(e.start)}T${(e.endTime && e.endTime > e.time ? e.endTime : plus1h(e.time)).replace(':', '')}00`]
+      : [`DTSTART;VALUE=DATE:${ymd(e.start)}`, `DTEND;VALUE=DATE:${ymd(addDays(e.end, 1))}`];
+    L.push('BEGIN:VEVENT', `UID:${e.uid}`, `DTSTAMP:${stamp(e.updated)}`, ...when,
+      `SUMMARY:${esc(e.summary)}`, `DESCRIPTION:${esc(e.description)}`, `SEQUENCE:${e.seq || 0}`, e.time ? 'TRANSP:OPAQUE' : 'TRANSP:TRANSPARENT');
+    if (e.location) L.push(`LOCATION:${esc(e.location)}`);
     if (e.url) L.push(`URL:${e.url}`);
     if (e.categories) L.push(`CATEGORIES:${esc(e.categories)}`);
     L.push('END:VEVENT');
@@ -69,6 +74,7 @@ function calendar(name, events) {
   return L.map(fold).join('\r\n') + '\r\n';
 }
 
+const plus1h = hm => { const [h, m] = hm.split(':').map(Number); return `${String(Math.min(23, h + 1)).padStart(2, '0')}:${h >= 23 ? '59' : String(m).padStart(2, '0')}`; };
 const STATE_MARK = { 완료: '✓ ', 지연: '⚠ ', 보류: '⏸ ' };
 
 function taskEvent(t, { req, lang, pname, phase, today }) {
@@ -80,10 +86,12 @@ function taskEvent(t, { req, lang, pname, phase, today }) {
     t.owner && `${T('담당')}: ${t.owner}`,
     `${T('상태')}: ${T(st)}${t.progress ? ` (${t.progress}%)` : ''}`,
     t.baseline_end && t.baseline_end !== t.end && `${T('기준 종료')}: ${t.baseline_end}`,
+    t.meeting_url && `${T('회의 링크')}: ${t.meeting_url}`,
     t.note && `${T('비고')}: ${t.note}`
   ].filter(Boolean).join('\n');
   return {
     uid: `task-${t.id}@rnd-schedule`, updated: t.updated_at, seq: t.version, start: t.start, end: t.end || t.start,
+    time: t.type === '회의' && t.start_time ? t.start_time : null, endTime: t.end_time, location: t.location,
     summary: `${STATE_MARK[st] || ''}${t.is_key ? '★ ' : ''}${t.code ? `[${t.code}] ` : ''}${t.name}`,
     description: desc, categories: pname,
     url: `${base(req)}/projects/${t.project_id}/tasks?open=${t.id}`
