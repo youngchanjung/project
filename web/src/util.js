@@ -68,10 +68,10 @@ export function taskCols({ phases, tasks, deps }) {
   const code = new Map(tasks.map(t => [t.id, t.code || `#${t.id}`]));
   const phaseName = id => phases.find(p => p.id === id)?.name || '';
   const predOf = id => deps.filter(d => d.succ_id === id).map(d => `${code.get(d.pred_id)}${d.kind !== 'FS' ? ' ' + d.kind : ''}${d.lag ? (d.lag > 0 ? '+' : '') + d.lag : ''}`).join(', ');
-  return [['code', 'ID'], [t => phaseName(t.phase_id), '단계'], ['name', '작업'], ['name_en', '작업명(영문)'], [t => tr(t.type), '유형'], ['owner', '담당'],
+  return [['code', 'ID'], [t => phaseName(t.phase_id), '단계'], ['name', '작업'], ['name_en', '작업명(영문)'], [t => tr(t.type), '유형'], ['owner', '담당'], ['company', '업체'], ['trade', '공종'],
     ['start', '시작'], ['end', '종료'], [t => (t.st ? tr(t.st) : tr(t.status)), '상태'], ['progress', '진행률'], [t => (t.is_key ? '★' : ''), '핵심'],
     [t => predOf(t.id), '선행작업'], ['baseline_start', '기준 시작'], ['baseline_end', '기준 종료'],
-    [t => (t.baseline_end && t.end ? diff(t.baseline_end, t.end) : ''), '편차'], ['actual_end', '실제 완료'], ['ref', '계약 조항'], ['note', '비고']];
+    [t => (t.baseline_end && t.end ? diff(t.baseline_end, t.end) : ''), '편차'], [t => (t.float ?? ''), '여유(근무일)'], [t => (t.crit ? 'CP' : ''), '크리티컬'], ['actual_end', '실제 완료'], ['ref', '계약 조항'], ['note', '비고']];
 }
 export function issueCols({ tasks }) {
   const code = new Map(tasks.map(t => [t.id, t.code || `#${t.id}`]));
@@ -92,8 +92,8 @@ export function downloadCSV(name, cols, rows) {
 export const CATEGORIES = [
   { key: 'research', name: '연구', icon: '🔬', color: '#8e5bd8', desc: '회의·시험·보고 일정 중심 (Teams·Outlook 연동 예정)',
     view: 'schedule', tabs: ['schedule', 'tasks', 'meetings', 'board', 'gantt', 'issues', 'dashboard', 'settings'] },
-  { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·선행관계·기준 일정',
-    view: 'gantt', tabs: ['gantt', 'dashboard', 'calendar', 'tasks', 'issues', 'board', 'meetings', 'settings'] },
+  { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·크리티컬 패스·기준선·룩어헤드',
+    view: 'gantt', tabs: ['gantt', 'lookahead', 'tasks', 'calendar', 'dashboard', 'issues', 'board', 'meetings', 'settings'] },
   { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
     view: 'board', tabs: ['board', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
 ];

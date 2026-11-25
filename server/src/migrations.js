@@ -308,6 +308,33 @@ const migrations = [
         t.string('partners', 300); // 연구: 협력 기관
       });
     }
+  },
+  {
+    // 시공 일정 재구성(11/25): 업체·공종, 기준선 버전
+    name: '011_construction_schedule',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('company', 120); // 업체(협력사)
+        t.string('trade', 80); // 공종
+      });
+      await k.schema.createTable('baselines', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('name', 100).notNullable();
+        t.integer('count').notNullable().defaultTo(0);
+        t.string('created_at', 32);
+        t.integer('created_by');
+        t.index(['project_id']);
+      });
+      await k.schema.createTable('baseline_tasks', t => {
+        t.increments('id');
+        t.integer('baseline_id').notNullable().references('baselines.id').onDelete('CASCADE');
+        t.integer('task_id').notNullable().references('tasks.id').onDelete('CASCADE');
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.index(['baseline_id']);
+      });
+    }
   }
 ];
 

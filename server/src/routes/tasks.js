@@ -14,7 +14,7 @@ export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
 const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
   'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
-  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url'];
+  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ymd = () => new Date().toISOString().slice(0, 10);
 

@@ -18,7 +18,8 @@ export function TaskRow({ t, right }) {
 }
 
 export default function Dashboard() {
-  const { filtered: all, issues, holidays, td, openIssue, phases, tasks, deps, project, toast } = useProject();
+  const { filtered: all, issues, holidays, td, openIssue, phases, tasks, deps, project, toast, bl } = useProject();
+  const isCons = project.category === 'construction';
   const ts = all.filter(t => !t.undated); // 날짜 없는 할 일은 칸반·할 일 목록에서만
   const wk = addD(td, 7);
   const late = ts.filter(t => t.st === '지연').sort((a, b) => a.end.localeCompare(b.end));
@@ -30,6 +31,9 @@ export default function Dashboard() {
   const ihigh = io.filter(i => i.priority === '상').sort((a, b) => (a.target || '9').localeCompare(b.target || '9'));
   const hols = holidays.filter(h => h.date >= td && h.date <= addD(td, 30));
   const done = ts.filter(t => t.st === '완료').length;
+  // 시공: 크리티컬 패스·기준선 대비 지연
+  const crit = ts.filter(t => t.crit).sort((a, b) => a.start.localeCompare(b.start));
+  const slipped = ts.map(t => { const b = bl(t); return b ? { t, n: diff(b.end, t.end) } : null; }).filter(x => x && x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
     <>
@@ -48,9 +52,17 @@ export default function Dashboard() {
         <div className="kpi prog">{tr('진행 중')}<b>{prog.length}</b></div>
         <div className="kpi soon">{tr('7일 내 시작·마감')}<b>{week.length}</b></div>
         <div className="kpi late">{tr('지연 이슈')}<b>{il.length}</b><span className="small">{tr('미해결')} {io.length}{tr('건 중')}</span></div>
+        {isCons && <div className="kpi late">{tr('크리티컬 작업')}<b style={{ color: 'var(--crit)' }}>{crit.length}</b><span className="small">{tr('여유 0일')}</span></div>}
+        {isCons && <div className="kpi late">{tr('기준선보다 늦음')}<b>{slipped.length}</b>{slipped[0] && <span className="small">{tr('최대 +{n}일', { n: slipped[0].n })}</span>}</div>}
         <div className="kpi done">{tr('완료')}<b>{done}</b><span className="small">{tr('전체 {n}건', { n: ts.length })} ({ts.length ? Math.round(done / ts.length * 100) : 0}%)</span></div>
       </div>
       <div className="grid2">
+        {isCons && <div className="card"><h3>{tr('크리티컬 패스')} <span className="small">{crit.length}{tr('건')} · {tr('늦어지면 전체 준공이 늦어짐')}</span></h3><div className="list">
+          {crit.slice(0, 12).map(t => <TaskRow key={t.id} t={t} right={<span className="dd fcrit">{t.st === '지연' ? ddayTxt(diff(td, t.end)) : fmt(t.end)}</span>} />)}
+          {!crit.length && <div className="empty">{tr('선행관계를 넣으면 크리티컬 패스가 계산됩니다.')}</div>}</div></div>}
+        {isCons && <div className="card"><h3>{tr('기준선 대비 지연')} <span className="small">{slipped.length}{tr('건')}</span></h3><div className="list">
+          {slipped.slice(0, 12).map(({ t, n }) => <TaskRow key={t.id} t={t} right={<span className="dd slip">+{n}{tr('일')}</span>} />)}
+          {!slipped.length && <div className="empty">{tr('기준선보다 늦어진 작업이 없습니다.')}</div>}</div></div>}
         <div className="card"><h3>{tr('기한 초과')} <span className="small">{late.length}{tr('건')}</span></h3><div className="list">
           {late.map(t => <TaskRow key={t.id} t={t} right={<span className="dd" style={{ color: 'var(--late)' }}>{ddayTxt(diff(td, t.end))}</span>} />)}
           {!late.length && <div className="empty">{tr('기한 초과 작업이 없습니다.')}</div>}</div></div>

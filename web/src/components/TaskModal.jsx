@@ -18,9 +18,9 @@ export default function TaskModal({ id, preset, onClose }) {
   const isCons = catOf(project.category).key === 'construction';
   const { user } = useApp();
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', ...preset };
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', ...preset };
   const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
-    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '' });
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
   const isMeeting = f.type === '회의';
   // "자세히": 선행관계·기준 일정 등 고급 항목. 시공은 기본으로 펼침, 연구·설계는 접어 둠 (선택은 기억)
@@ -134,6 +134,11 @@ export default function TaskModal({ id, preset, onClose }) {
               <label className="small"><input type="checkbox" checked={!!f.is_key} onChange={set('is_key')} /> {tr('핵심 ★')}</label></>}</div>
             <label>{tr('작업명 (영문)')}</label><input type="text" value={f.name_en || ''} onChange={set('name_en')} />
             <label>{tr('담당 (기관·사람)')}</label><input type="text" value={f.owner || ''} onChange={set('owner')} placeholder={tr('예: Integra / Space+')} />
+            {isCons && <><label>{tr('업체 · 공종')}</label>
+              <div className="row"><input type="text" list="dl-company" value={f.company || ''} onChange={set('company')} placeholder={tr('업체(협력사)')} style={{ flex: 1 }} />
+                <input type="text" list="dl-trade" value={f.trade || ''} onChange={set('trade')} placeholder={tr('공종 (예: 철근콘크리트)')} style={{ flex: 1 }} />
+                <datalist id="dl-company">{[...new Set(tasks.map(x => x.company).filter(Boolean))].sort().map(v => <option key={v} value={v} />)}</datalist>
+                <datalist id="dl-trade">{[...new Set(tasks.map(x => x.trade).filter(Boolean))].sort().map(v => <option key={v} value={v} />)}</datalist></div></>}
             {isCons && <><label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></>}
             <label>{tr('진행률')}</label>
             <div className="row"><input type="number" min="0" max="100" step="10" value={f.progress} onChange={set('progress')} style={{ width: 80 }} />%
@@ -141,6 +146,7 @@ export default function TaskModal({ id, preset, onClose }) {
             <label>{tr('최초 가능일')}</label><div className="row"><DateInput value={f.not_before || ''} onChange={set('not_before')} /><span className="small">{tr('자동 계산 시 이 날짜보다 앞당기지 않음')}</span></div>
             <label>{tr('기준 일정')}</label><div className="row"><DateInput value={f.baseline_start || ''} onChange={set('baseline_start')} /> ~ <DateInput value={f.baseline_end || ''} onChange={set('baseline_end')} />
               {t?.baseline_end && !t.undated && t.end !== t.baseline_end && <span className="small" style={{ color: t.end > t.baseline_end ? 'var(--late)' : 'var(--done)' }}>{tr('편차')} {diff(t.baseline_end, t.end) > 0 ? '+' : ''}{diff(t.baseline_end, t.end)}{tr('일')}</span>}</div>
+            {isCons && t?.float != null && <><label>{tr('여유')}</label><div className="row">{t.crit ? <span className="fcrit"><span className="cptag">CP</span>{tr('크리티컬 패스: 늦어지면 전체 준공이 늦어집니다.')}</span> : <span>{tr('{n}일 늦어져도 전체 준공에는 영향이 없습니다.', { n: t.float })}</span>}</div></>}
             <label>{tr('계약 조항')}</label><input type="text" value={f.ref || ''} onChange={set('ref')} />
           </>}
         </div>

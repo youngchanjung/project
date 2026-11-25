@@ -3,7 +3,7 @@ import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate } from '../util.js';
 import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
 import { normCalendars } from '../countries.js';
-import { stateOf } from '../schedule.js';
+import { stateOf, criticalPath } from '../schedule.js';
 import { insertDefaultColumns } from '../migrations.js';
 import { TASK_STATUS } from './tasks.js';
 
@@ -110,7 +110,7 @@ projectsRouter.post('/', ah(async (req, res) => {
 projectsRouter.get('/:id/data', ah(async (req, res) => {
   const id = Number(req.params.id);
   const project = await loadProject(id);
-  const [phases, tasks, deps, issues, members, role, hol, columns, checklist] = await Promise.all([
+  const [phases, tasks, deps, issues, members, role, hol, columns, checklist, baselines] = await Promise.all([
     db('phases').where({ project_id: id }).orderBy('sort'),
     db('tasks').where({ project_id: id }).orderBy([{ column: 'sort' }, { column: 'start' }]),
     db('dependencies').where({ project_id: id }),
@@ -119,11 +119,16 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
     projectRole(req.user, id),
     db('holidays').whereIn('country', String(project.calendars || 'KR').split(',')).orderBy('date'),
     db('board_columns').where({ project_id: id }).orderBy('sort'),
-    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: id })).orderBy([{ column: 'task_id' }, { column: 'sort' }])
+    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: id })).orderBy([{ column: 'task_id' }, { column: 'sort' }]),
+    db('baselines').where({ project_id: id }).orderBy('id', 'desc')
   ]);
+  // 크리티컬 패스·여유일 (근무일 기준, 프로젝트 달력)
+  const cal = project.day_basis === 'calendar' ? null : new Set(hol.map(h => h.date));
+  const cp = criticalPath(tasks.map(t => ({ ...t, undated: !!t.undated })), deps, cal);
   res.json({
     project: { ...project, archived: !!project.archived }, phases,
-    tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key, undated: !!t.undated })), deps, issues, members, role, holidays: hol,
+    tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
+    deps, issues, members, role, holidays: hol, baselines,
     columns: columns.map(c => ({ ...c, is_review: !!c.is_review })), checklist: checklist.map(c => ({ ...c, done: !!c.done }))
   });
 }));
@@ -150,6 +155,8 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
   await db.transaction(async trx => {
     for (const t of ['issue_comments']) await trx(t).whereIn('issue_id', trx('issues').select('id').where({ project_id: id })).del();
     await trx('task_checklist').whereIn('task_id', trx('tasks').select('id').where({ project_id: id })).del();
+    await trx('baseline_tasks').whereIn('baseline_id', trx('baselines').select('id').where({ project_id: id })).del();
+    await trx('baselines').where({ project_id: id }).del();
     for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
@@ -270,6 +277,46 @@ projectsRouter.post('/:id/baseline', ah(async (req, res) => {
   const n = await q.update({ baseline_start: db.ref('start'), baseline_end: db.ref('end') });
   await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'baseline', label: `기준 일정 확정 (${n}건)` });
   res.json({ updated: n });
+}));
+
+// ---- 기준선 버전: 지금 일정을 이름 붙여 저장, 버전끼리 비교 ----
+projectsRouter.post('/:id/baselines', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id, 'pm');
+  const name = String(req.body?.name || '').trim().slice(0, 100) || `기준선 ${now().slice(0, 10)}`;
+  const out = await db.transaction(async trx => {
+    const ts = await trx('tasks').where({ project_id: id, undated: false }).select('id', 'start', 'end');
+    const bid = await insertId(trx, 'baselines', { project_id: id, name, count: ts.length, created_at: now(), created_by: req.user.id });
+    for (let i = 0; i < ts.length; i += 200) {
+      await trx('baseline_tasks').insert(ts.slice(i, i + 200).map(t => ({ baseline_id: bid, task_id: t.id, start: t.start, end: t.end })));
+    }
+    // 화면에서 비교하는 '현재 기준 일정'도 이 버전으로 맞춤
+    await trx('tasks').where({ project_id: id, undated: false }).update({ baseline_start: trx.ref('start'), baseline_end: trx.ref('end') });
+    await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'baseline', label: `기준선 저장: ${name} (${ts.length}건)` });
+    return { id: bid, name, count: ts.length };
+  });
+  res.json(out);
+}));
+
+projectsRouter.get('/:id/baselines/:bid', ah(async (req, res) => {
+  const id = Number(req.params.id), bid = Number(req.params.bid);
+  await loadProject(id);
+  const b = await db('baselines').where({ id: bid, project_id: id }).first();
+  if (!b) throw new HttpError(404, '기준선을 찾을 수 없습니다.');
+  res.json({ ...b, rows: await db('baseline_tasks').where({ baseline_id: bid }).select('task_id', 'start', 'end') });
+}));
+
+projectsRouter.delete('/:id/baselines/:bid', ah(async (req, res) => {
+  const id = Number(req.params.id), bid = Number(req.params.bid);
+  await need(req, id, 'pm');
+  const b = await db('baselines').where({ id: bid, project_id: id }).first();
+  if (!b) throw new HttpError(404, '기준선을 찾을 수 없습니다.');
+  await db.transaction(async trx => {
+    await trx('baseline_tasks').where({ baseline_id: bid }).del();
+    await trx('baselines').where({ id: bid }).del();
+    await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'baseline', label: `기준선 삭제: ${b.name}` });
+  });
+  res.json({ ok: true });
 }));
 
 // ---- 변경 이력 ----
