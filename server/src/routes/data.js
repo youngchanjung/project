@@ -57,7 +57,7 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
     const existing = await trx('tasks').where({ project_id: pid });
     const byCode = new Map(existing.filter(t => t.code).map(t => [t.code, t]));
     let tsort = existing.reduce((m, t) => Math.max(m, t.sort), 0);
-    const FIELDS = ['name', 'name_en', 'type', 'owner', 'start', 'end', 'baseline_end', 'actual_end', 'not_before', 'status', 'is_key', 'ref', 'note'];
+    const FIELDS = ['name', 'name_en', 'type', 'owner', 'company', 'trade', 'start', 'end', 'baseline_end', 'actual_end', 'not_before', 'status', 'is_key', 'ref', 'note'];
     for (const t of parsed.tasks) {
       const row = { phase_id: t.phase ? phaseId.get(t.phase) : null };
       for (const f of FIELDS) if (t[f] !== undefined) row[f] = t[f] ?? null;

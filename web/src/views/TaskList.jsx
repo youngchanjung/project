@@ -10,7 +10,7 @@ const PRIO_RANK = { 긴급: 0, 높음: 1, 보통: 2, 낮음: 3 };
 
 // 작업 목록(시공) / 할 일 목록(연구·설계): 같은 데이터를 표로 보기. 정렬·검색·일괄 완료·엑셀 내보내기
 export default function TaskList() {
-  const { filtered, phases, td, color, openTask, can, afterSave, toast, project, deps, tasks, members, checklist } = useProject();
+  const { filtered, phases, td, color, openTask, can, afterSave, toast, project, deps, tasks, members, checklist, bl } = useProject();
   const isCons = catOf(project.category).key === 'construction';
   const [st, setSt] = useState('');
   const [sort, setSort] = useState([isCons ? 'start' : 'end', 1]);
@@ -33,11 +33,13 @@ export default function TaskList() {
     if (k === 'phase') return phaseName(t.phase_id);
     if (k === 'assignee') return memberName(t.assignee_id) || t.owner || '';
     if (k === 'priority') return PRIO_RANK[t.priority] ?? 2;
+    if (k === 'float') return t.float ?? 1e9 * dir;
+    if (k === 'slip') { const b = bl(t); return b && !t.undated ? diff(b.end, t.end) : -1e9 * dir; }
     return t[k] ?? '';
   };
   ts = [...ts].sort((a, b) => (val(a) > val(b) ? 1 : val(a) < val(b) ? -1 : 0) * dir);
   const cols = isCons
-    ? [['code', 'ID'], ['phase', '단계'], ['name', '작업'], ['type', '유형'], ['owner', '담당'], ['start', '시작'], ['end', '종료'], ['dday', 'D-day'], ['status', '상태'], ['pred', '선행'], ['note', '비고']]
+    ? [['code', 'ID'], ['phase', '단계'], ['name', '작업'], ['type', '유형'], ['owner', '담당'], ['company', '업체 · 공종'], ['start', '시작'], ['end', '종료'], ['dday', 'D-day'], ['status', '상태'], ['float', '여유'], ['slip', '기준선 차이'], ['pred', '선행'], ['note', '비고']]
     : [['name', '할 일'], ['assignee', '담당자'], ['end', '마감일'], ['dday', 'D-day'], ['priority', '우선순위'], ['tags', '태그'], ['check', '체크리스트'], ['status', '상태']];
   const ed = can();
 
@@ -92,10 +94,12 @@ export default function TaskList() {
               {isCons ? <>
                 <td className="nw small">{t.code}</td>
                 <td className="nw"><span className="dot" style={{ background: color(t.phase_id) }} />{phaseName(t.phase_id)}</td>
-                <td>{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx>{t.name_en && <div className="small">{t.name_en}</div>}</td>
-                <td className="nw">{tr(t.type)}</td><td>{t.owner}</td>
+                <td style={{ minWidth: 220 }}>{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx>{t.name_en && <div className="small">{t.name_en}</div>}</td>
+                <td className="nw">{tr(t.type)}</td><td className="nw">{t.owner}</td><td className="nw">{t.company}{t.trade && <div className="small">{t.trade}</div>}</td>
                 <td className="nw">{t.undated ? '—' : fmtYW(t.start)}</td><td className="nw">{t.undated ? '—' : fmtYW(t.end)}</td>
                 {dd}{status}
+                <td className="nw">{t.float == null ? '' : <>{t.crit && <span className="cptag">CP</span>}<span className={t.crit ? 'fcrit' : ''}>{t.float}{tr('일')}</span></>}</td>
+                <td className="nw">{(() => { const b = bl(t); const n = b && !t.undated ? diff(b.end, t.end) : null; return n == null ? '' : n > 0 ? <span className="slip">+{n}{tr('일')}</span> : n < 0 ? <span className="early">{n}{tr('일')}</span> : '0'; })()}</td>
                 <td className="small">{predOf(t.id)}</td>
                 <td className="small"><Tx>{t.note}</Tx></td>
               </> : <>

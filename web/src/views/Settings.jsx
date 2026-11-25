@@ -244,21 +244,37 @@ function ImportExport() {
 }
 
 function Baseline() {
-  const { project, tasks, reload, toast } = useProject();
+  const { project, tasks, reload, toast, baselines, can, baseSel, setBaseSel } = useProject();
   const missing = tasks.filter(t => !t.baseline_end).length;
   const slipped = tasks.filter(t => t.baseline_end && t.end > t.baseline_end).length;
-  const run = async onlyMissing => {
-    if (!onlyMissing && !confirm(tr('모든 작업의 현재 일정을 새 기준 일정으로 저장합니다. 지금까지의 편차 기록은 초기화됩니다. 계속할까요?'))) return;
-    const r = await api.post(`/projects/${project.id}/baseline`, { onlyMissing });
+  const pm = can('pm');
+  const fill = async () => {
+    const r = await api.post(`/projects/${project.id}/baseline`, { onlyMissing: true });
     await reload(); toast(tr('기준 일정 {n}건 저장', { n: r.updated }));
+  };
+  const save = async () => {
+    const name = window.prompt(tr('새 기준선 이름 (예: 최초 계획, 1차 변경 승인)'), tr('기준선') + ' ' + (baselines.length + 1));
+    if (name == null) return;
+    try { const r = await api.post(`/projects/${project.id}/baselines`, { name }); await reload(); toast(tr('기준선 ‘{name}’을 저장했습니다. ({n}건)', { name: r.name, n: r.count })); }
+    catch (e) { toast(e.message); }
+  };
+  const del = async b => {
+    if (!confirm(tr('기준선 ‘{name}’을 지울까요? 작업 일정은 바뀌지 않습니다.', { name: b.name }))) return;
+    try { await api.del(`/projects/${project.id}/baselines/${b.id}`); if (baseSel === b.id) setBaseSel(0); await reload(); }
+    catch (e) { toast(e.message); }
   };
   return (
     <div className="card"><h3>{tr('기준 일정 (Baseline)')}</h3>
-      <p className="small">{tr('기준 일정은 처음 합의한 일정입니다. 이후 날짜가 바뀌면 간트와 작업 정보에 편차(일)가 표시됩니다.')}</p>
+      <p className="small">{tr('기준 일정은 합의한 일정입니다. 날짜가 바뀌면 간트·작업 목록·대시보드에 기준선 대비 차이(일)가 표시됩니다. 변경 승인 때마다 새 기준선으로 저장하면 이전 기준선은 버전으로 남아 간트의 ‘기준선’ 메뉴에서 비교할 수 있습니다.')}</p>
       <p>{tr('기준보다 늦어진 작업')} <b style={{ color: slipped ? 'var(--late)' : undefined }}>{slipped}</b>{tr('건 · 기준 일정이 없는 작업')} {missing}{tr('건')}</p>
-      <div className="toolbar">
-        <button className="btn" disabled={!missing} onClick={() => run(true)}>{tr('빈 작업만 현재 일정으로 채우기')}</button>
-        <button className="btn danger" onClick={() => run(false)}>{tr('전체를 현재 일정으로 재확정')}</button>
+      {pm && <div className="toolbar">
+        <button className="btn" disabled={!missing} onClick={fill}>{tr('빈 작업만 현재 일정으로 채우기')}</button>
+        <button className="btn primary" onClick={save}>{tr('+ 지금 일정을 기준선으로 저장')}</button>
+      </div>}
+      <div className="list">
+        {baselines.map(b => <div key={b.id} className="item"><div className="main"><div className="t">{b.name}</div><div className="small">{b.created_at.slice(0, 10)} · {b.count}{tr('건')}</div></div>
+          {pm && <button className="btn sm danger" onClick={() => del(b)}>{tr('삭제')}</button>}</div>)}
+        {!baselines.length && <div className="empty">{tr('저장한 기준선 버전이 없습니다.')}</div>}
       </div>
     </div>
   );

@@ -14,6 +14,7 @@ import TaskList from '../views/TaskList.jsx';
 import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
 import Meetings from '../views/Meetings.jsx';
+import Lookahead from '../views/Lookahead.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
 import { tr } from '../i18n.js';
@@ -31,10 +32,17 @@ export default function Project() {
   const [modal, setModal] = useState(null); // {kind:'task'|'issue', id|null, preset}
   const [filter, setFilter] = useState({ off: [], q: '', hideDone: false });
   const [sp, setSp] = useSearchParams();
+  // 비교할 기준선: 0 = 현재 기준 일정(작업의 기준 시작·종료), 숫자 = 저장한 기준선 버전
+  const [baseSel, setBaseSel] = useState(0);
+  const [baseRows, setBaseRows] = useState(null);
   const td = today();
 
   const reload = useCallback(() => api.get(`/projects/${id}/data`).then(setData).catch(e => setErr(e.message)), [id]);
-  useEffect(() => { setData(null); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
+  useEffect(() => { setData(null); setBaseSel(0); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
+  useEffect(() => {
+    if (!baseSel) { setBaseRows(null); return; }
+    api.get(`/projects/${id}/baselines/${baseSel}`).then(b => setBaseRows(new Map(b.rows.map(r => [r.task_id, r])))).catch(() => { setBaseSel(0); setBaseRows(null); });
+  }, [id, baseSel]);
   // 날짜 달력에 이 프로젝트의 공휴일 표시
   useEffect(() => { setDateHolidays(data?.holidays || null); return () => setDateHolidays(null); }, [data?.holidays]);
   // ?open=ID 로 들어오면 해당 작업/이슈 열기 (홈 화면 링크)
@@ -51,7 +59,7 @@ export default function Project() {
     const q = filter.q.trim().toLowerCase();
     return tasks.filter(t => !filter.off.includes(t.phase_id ?? 0))
       .filter(t => !filter.hideDone || t.st !== '완료')
-      .filter(t => !q || [t.code, t.name, t.name_en, t.owner, t.note, t.type].join(' ').toLowerCase().includes(q));
+      .filter(t => !q || [t.code, t.name, t.name_en, t.owner, t.company, t.trade, t.note, t.type].join(' ').toLowerCase().includes(q));
   }, [tasks, filter]);
 
   if (err) return <main className="page"><div className="err">{err}</div></main>;
@@ -62,6 +70,12 @@ export default function Project() {
   const color = pid => phaseColor(data.phases, pid);
   const ctx = {
     ...data, tasks, filtered, filter, setFilter, reload, role, can, color, td, toast,
+    baseSel, setBaseSel, baselines: data.baselines || [],
+    // 이 작업의 기준선 {start, end} (없으면 null)
+    bl: t => {
+      if (baseSel) { const r = baseRows?.get(t.id); return r ? { start: r.start, end: r.end } : null; }
+      return t.baseline_end ? { start: t.baseline_start || t.baseline_end, end: t.baseline_end } : null;
+    },
     openTask: (taskId, preset) => setModal({ kind: 'task', id: taskId ?? null, preset }),
     openIssue: (issueId, preset) => setModal({ kind: 'issue', id: issueId ?? null, preset }),
     // 저장 결과로 자동 조정된 작업이 있으면 알림
@@ -71,7 +85,7 @@ export default function Project() {
   const cat = catOf(p.category);
   const isCons = cat.key === 'construction';
   const NAMES = {
-    dashboard: tr('대시보드'), gantt: tr('간트'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
     board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
   const tabs = cat.tabs.map(k => [k, NAMES[k]]);
@@ -98,6 +112,7 @@ export default function Project() {
           <Route path="board" element={<Board />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="gantt" element={<Gantt />} />
+          <Route path="lookahead" element={<Lookahead />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />
