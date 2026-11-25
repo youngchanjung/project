@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
+import PageTip, { resetTips } from './components/PageTip.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { PALETTE, CATEGORIES, personColor } from './util.js';
 import { api } from './api.js';
@@ -87,6 +88,7 @@ export default function App() {
             {!side && <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 펼치기')}>☰</button>}
             {!side && <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>}
             <div className="sp" />
+            <button className="iconbtn" onClick={() => { resetTips(); toast(tr('화면 안내를 다시 보여 줍니다.')); }} title={tr('화면 안내 다시 보기')} aria-label={tr('화면 안내 다시 보기')}>❔</button>
             <FontSelect />
             <LangSelect lang={lang} onChange={changeLang} />
             <ContentTrToggle />
@@ -95,6 +97,7 @@ export default function App() {
             <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
             <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
           </header>
+          <PageTip />
           <Routes key={lang}>
             <Route path="/" element={<Home />} />
             <Route path="/my" element={<MyTasks />} />
