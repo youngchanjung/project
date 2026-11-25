@@ -81,7 +81,7 @@ test('공휴일: 목록에 있는 나라만 허용, 여러 날 붙여넣기, 프
   const cs = (await call('GET', '/holidays/countries')).body.map(c => c.code);
   assert.deepEqual(cs, ['KR', 'VN']);
   assert.equal((await call('POST', '/holidays', { country: 'JP', date: '2027-01-01', name: 'x' })).status, 400);
-  const r = await call('POST', '/holidays/bulk', { country: 'VN', text: '2030-01-01 Tết Dương lịch\n2030/2/5\t설\n2030.02.05 중복\n\n' });
+  const r = await call('POST', '/holidays/bulk', { country: 'VN', text: '2031-01-01 Tết Dương lịch\n2031/2/5\t설\n2031.02.05 중복\n\n' });
   assert.deepEqual(r.body, { added: 2, skipped: 1 });
   assert.equal((await call('POST', '/holidays/bulk', { country: 'VN', text: '내일' })).status, 400);
   const p = await call('POST', '/projects', { name: '시험', calendars: 'vn,XX' });
@@ -112,11 +112,13 @@ test('내용 번역: 같은 문장은 저장된 번역을 쓰고 DeepL 은 한 �
   assert.equal(off.status, 503); // 키가 없으면 꺼짐
 });
 
-test('공휴일 기본값: 한국 2027(노동절·제헌절 대체), 베트남 2026·2027 들어 있음', async () => {
+test('공휴일 기본값: 한국 2027~2030(대체공휴일), 베트남 2026~2030(2027년부터 일반 기업 기준)', async () => {
   const { db } = await import('../src/db.js');
   const has = async (country, date) => !!(await db('holidays').where({ country, date }).first());
   for (const d of ['2027-05-03', '2027-07-19', '2027-02-07', '2027-12-27']) assert.ok(await has('KR', d), `KR ${d}`);
-  for (const d of ['2026-02-17', '2026-09-01', '2026-11-24', '2027-02-04', '2027-09-03']) assert.ok(await has('VN', d), `VN ${d}`);
+  for (const d of ['2028-10-05', '2029-05-21', '2030-02-05']) assert.ok(await has('KR', d), `KR ${d}`);
+  for (const d of ['2026-02-17', '2026-09-01', '2026-11-24', '2027-02-11', '2027-09-03', '2028-01-26', '2028-05-02', '2030-02-08']) assert.ok(await has('VN', d), `VN ${d}`);
+  assert.ok(!(await has('VN', '2027-02-04')), '2027-02-04 는 일반 기업 기준에서 근무일');
 });
 
 test('엑셀 내보내기: 시트·머리글·행을 그대로 담고, 같은 시트 이름은 구분, 빈 요청은 거부', async () => {

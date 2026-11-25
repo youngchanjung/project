@@ -435,6 +435,21 @@ const migrations = [
         t.index(['project_id']); t.index(['task_id']); t.index(['issue_id']);
       });
     }
+  },
+  {
+    // 공휴일 2028~2030 추가(한국·베트남), 베트남 2027년부터 일반 기업 기준(뗏 2/5~2/11).
+    // 관리 화면에서 직접 고친 날짜는 건드리지 않음: 이전 기본값 이름 그대로인 2027-02-04 만 지움
+    name: '016_holidays_2030_vn_enterprise',
+    async up(k) {
+      await k('holidays').where({ country: 'VN', date: '2027-02-04', name: 'Nghỉ Tết / 뗏 연휴' }).del();
+      const { KR_HOLIDAYS } = await import('./holidaysKR.js');
+      const { VN_HOLIDAYS } = await import('./holidaysVN.js');
+      for (const [country, list] of [['KR', KR_HOLIDAYS.filter(([d]) => d >= '2028')], ['VN', VN_HOLIDAYS.filter(([d]) => d >= '2027')]]) {
+        for (const [date, name] of list) {
+          if (!(await k('holidays').where({ country, date }).first())) await k('holidays').insert({ country, date, name });
+        }
+      }
+    }
   }
 ];
 
