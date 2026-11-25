@@ -24,6 +24,7 @@ export default function Settings() {
       <ImportExport />
       {isCons && <TimelineEvents />}
       {can('pm') && <Baseline />}
+      {can('pm') && <TeamsChannel />}
       <div className="card" style={{ gridColumn: '1/-1' }}><h3>{tr('프로젝트 변경 이력')} <span className="small">{tr('최근 300건')}</span></h3><History /></div>
     </div>
   );
@@ -350,6 +351,35 @@ function TimelineEvents() {
         <input type="color" value={f.color} onChange={e => setF({ ...f, color: e.target.value })} title={tr('색')} />
         <button className="btn primary" disabled={!f.name || !f.start} onClick={add}>{tr('+ 기간 추가')}</button>
       </div>}
+    </div>
+  );
+}
+
+// Teams 채널 알림: 채널의 워크플로 웹후크 주소를 넣으면 검토 요청·회의 초대·새 이슈와 하루 일정 요약이 채널로 감
+function TeamsChannel() {
+  const { project, reload, toast } = useProject();
+  const [url, setUrl] = useState(project.teams_webhook || '');
+  const [err, setErr] = useState(null);
+  useEffect(() => setUrl(project.teams_webhook || ''), [project.teams_webhook]);
+  const save = async v => {
+    try { await api.patch(`/projects/${project.id}`, { teams_webhook: v }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
+    catch (e) { setErr(e.message); }
+  };
+  const test = async () => {
+    try { await api.post(`/projects/${project.id}/teams-test`); toast(tr('Teams 채널로 시험 알림을 보냈습니다.')); setErr(null); }
+    catch (e) { setErr(e.message); }
+  };
+  return (
+    <div className="card"><h3>{tr('Teams 채널 알림')} {project.teams_on && <span className="badge b-완료">{tr('켜짐')}</span>}</h3>
+      <p className="small">{tr('Teams 채널 ⋯ → 워크플로 → "웹후크 요청이 수신되면 채널에 게시" 로 만든 주소를 붙여 넣으세요. 검토 요청·승인, 회의 초대, 새 이슈와 매일 아침 일정 요약(오늘 회의, 마일스톤·제출일, 기한 지난 작업)이 채널에 올라갑니다.')}</p>
+      {err && <div className="err">{err}</div>}
+      <div className="row"><input type="text" value={url} onChange={e => setUrl(e.target.value)} placeholder="https://….logic.azure.com/workflows/…" style={{ flex: 1 }} /></div>
+      <div className="row" style={{ marginTop: 8 }}>
+        <div className="sp" />
+        {project.teams_on && <button className="btn" onClick={() => { setUrl(''); save(null); }}>{tr('끄기')}</button>}
+        {project.teams_on && <button className="btn" onClick={test}>{tr('시험 보내기')}</button>}
+        <button className="btn primary" onClick={() => save(url.trim() || null)}>{tr('저장')}</button>
+      </div>
     </div>
   );
 }

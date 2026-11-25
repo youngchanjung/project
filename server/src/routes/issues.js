@@ -5,6 +5,7 @@ import { requireLogin } from '../auth.js';
 import { need, loadProject } from './projects.js';
 
 import { notify, recipientsOf } from '../notify.js';
+import { queueChannel } from '../teams.js';
 
 export const issuesRouter = Router({ mergeParams: true });
 issuesRouter.use(requireLogin);
@@ -46,7 +47,9 @@ issuesRouter.post('/', ah(async (req, res) => {
     await notify(trx, await recipientsOf(trx, i), { kind: 'issue_assigned', projectId: pid, entity: 'issue', entityId: id, actorId: req.user.id, params: { name: i.title, code: i.code, by: req.user.name } });
     return id;
   });
-  res.json(await db('issues').where({ id }).first());
+  const row = await db('issues').where({ id }).first();
+  queueChannel({ kind: 'issue_created', projectId: pid, entity: 'issue', entityId: id, params: { name: row.title, code: row.code, by: req.user.name } });
+  res.json(row);
 }));
 
 issuesRouter.patch('/:iid', ah(async (req, res) => {

@@ -24,8 +24,9 @@ import { issuesRouter } from './routes/issues.js';
 import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
-import { startScheduler, onPeriodic } from './scheduler.js';
+import { startScheduler, onPeriodic, onDaily } from './scheduler.js';
 import { scheduleSync, syncAll } from './outlook.js';
+import { dailyDigest } from './teams.js';
 
 export function createApp() {
   const app = express();
@@ -115,5 +116,6 @@ if (isMain) {
   });
   resumeMeetings().catch(e => console.error('회의록 처리 재개 실패', e));
   onPeriodic(syncAll);
+  onDaily(dailyDigest);
   startScheduler();
 }

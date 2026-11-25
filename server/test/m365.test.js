@@ -12,6 +12,7 @@ process.env.DATA_DIR = tmp;
 process.env.SESSION_SECRET = 'test';
 process.env.M365_MAIL_DELAY_MS = '0';
 process.env.M365_SYNC_DELAY_MS = '0';
+process.env.TEAMS_ALLOW_HTTP = '1';
 const wait = (ms = 150) => new Promise(r => setTimeout(r, ms));
 
 // ---- 가짜 Microsoft (로그인·Graph·Teams 웹후크) ----
@@ -186,4 +187,41 @@ test('Outlook: 담당 작업은 종일 일정, 회의는 참석자 초대·Teams
   await call('PATCH', `/api/projects/${p.id}`, { archived: true });
   await sync();
   assert.equal(ms.events.size, 0);
+});
+
+test('Teams 채널: 웹후크 저장(PM만 보임)·시험 보내기·검토 요청·새 이슈·하루 요약(하루 한 번)', async () => {
+  const p = (await call('POST', '/api/projects', { name: '채널 시험', category: 'research' })).body;
+  assert.equal((await call('PATCH', `/api/projects/${p.id}`, { teams_webhook: 'ftp://x' })).status, 400);
+  const hook = `${ms.base}/teams/abc`;
+  assert.equal((await call('PATCH', `/api/projects/${p.id}`, { teams_webhook: hook })).status, 200);
+  // 목록·기록에는 주소가 안 보임
+  const list = (await call('GET', '/api/projects')).body;
+  assert.equal(list.find(x => x.id === p.id).teams_webhook, undefined);
+  const data = (await call('GET', `/api/projects/${p.id}/data`)).body;
+  assert.equal(data.project.teams_webhook, hook); assert.equal(data.project.teams_on, true);
+  ms.teams.length = 0;
+  assert.equal((await call('POST', `/api/projects/${p.id}/teams-test`)).status, 200);
+  assert.equal(ms.teams.length, 1);
+  assert.equal(ms.teams[0].attachments[0].contentType, 'application/vnd.microsoft.card.adaptive');
+  // 칸반 검토 열로 옮기면 검토 요청 카드
+  const t = (await call('POST', `/api/projects/${p.id}/tasks`, { name: '보고서 초안' })).body.task;
+  const review = data.columns.find(c => c.is_review);
+  await call('POST', `/api/projects/${p.id}/tasks/${t.id}/move`, { column_id: review.id });
+  await call('POST', `/api/projects/${p.id}/issues`, { title: '시료 부족' });
+  await wait();
+  const texts = ms.teams.slice(1).map(m => JSON.stringify(m.attachments[0].content.body));
+  assert.ok(texts.some(x => x.includes('보고서 초안') && x.includes('검토를 요청')));
+  assert.ok(texts.some(x => x.includes('시료 부족') && x.includes('이슈를 등록')));
+  // 하루 요약: 오늘 마일스톤이 있으면 한 번만
+  const { dailyDigest } = await import('../src/teams.js');
+  const today = new Date().toISOString().slice(0, 10);
+  await call('POST', `/api/projects/${p.id}/tasks`, { name: '중간 보고', type: '마일스톤', start: today, end: today });
+  ms.teams.length = 0;
+  assert.ok(await dailyDigest(today) >= 1);
+  assert.equal(await dailyDigest(today), 0);
+  const dig = JSON.stringify(ms.teams.find(m => JSON.stringify(m).includes('채널 시험')));
+  assert.match(dig, /중간 보고/);
+  // 끄기
+  await call('PATCH', `/api/projects/${p.id}`, { teams_webhook: '' });
+  assert.equal((await call('GET', `/api/projects/${p.id}/data`)).body.project.teams_on, false);
 });

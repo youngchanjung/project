@@ -14,6 +14,7 @@
 import { db } from './db.js';
 import { now, insertId } from './util.js';
 import { queueMail } from './mailer.js';
+import { queueChannel } from './teams.js';
 import { stateOf, addDays } from './schedule.js';
 
 // 담당자 계정 + 담당 칸에 이름이 들어간 사람 (홈 '내 작업'과 같은 규칙)
@@ -41,6 +42,7 @@ export async function notify(trx, userIds, { kind, projectId, entity, entityId, 
     });
     queueMail(id); // 메일 알림이 설정돼 있으면 저장된 뒤 메일로도
   }
+  if (!dedupe) queueChannel({ kind, projectId, entity, entityId, params }); // 프로젝트 Teams 채널 (검토·회의 초대)
 }
 
 // 하루 한 번(사용자별): 내 작업 중 3일 안에 마감하거나 기한이 지난 것

@@ -8,6 +8,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
 import { insertDefaultColumns } from '../migrations.js';
+import { validWebhook, postCard } from '../teams.js';
 import { TASK_STATUS, TASK_TYPES, TASK_PRIORITY } from './tasks.js';
 
 export const projectsRouter = Router();
@@ -71,7 +72,7 @@ projectsRouter.get('/', ah(async (req, res) => {
     const dated = ts.filter(x => !x.undated);
     const span = dated.length ? [dated.reduce((a, x) => x.start < a ? x.start : a, '9999'), dated.reduce((a, x) => x.end > a ? x.end : a, '0000')] : [null, null];
     return {
-      ...p, archived: !!p.archived,
+      ...p, teams_webhook: undefined, archived: !!p.archived,
       myRole: req.user.role === 'admin' ? 'pm' : (mem.find(m => m.project_id === p.id)?.role || 'viewer'),
       member: !!mem.find(m => m.project_id === p.id),
       pms: pms.filter(x => x.project_id === p.id).map(x => x.name),
@@ -251,7 +252,7 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
   const cal = project.day_basis === 'calendar' ? null : new Set(hol.map(h => h.date));
   const cp = criticalPath(tasks.map(t => ({ ...t, undated: !!t.undated })), deps, cal);
   res.json({
-    project: { ...project, archived: !!project.archived }, phases,
+    project: { ...project, archived: !!project.archived, teams_webhook: role === 'pm' ? project.teams_webhook || '' : undefined, teams_on: !!project.teams_webhook }, phases,
     leaves: req.user.external ? leaves.filter(l => l.user_id === req.user.id) : leaves,
     tasks: tasks.map(t => ({ ...t, spent: spent.get(t.id) || 0, is_key: !!t.is_key, teams_meeting: !!t.teams_meeting, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
     deps, issues, members, role, holidays: hol, baselines, events,
@@ -263,15 +264,34 @@ projectsRouter.patch('/:id', ah(async (req, res) => {
   const id = Number(req.params.id);
   await need(req, id, 'pm');
   const before = await loadProject(id);
-  const up = pick(req.body || {}, [...PCOLS, 'archived']);
+  const up = pick(req.body || {}, [...PCOLS, 'archived', 'teams_webhook']);
+  if (up.teams_webhook !== undefined) {
+    const w = validWebhook(up.teams_webhook);
+    if (w === false) throw new HttpError(400, 'Teams 웹후크 주소는 https:// 로 시작해야 합니다.');
+    up.teams_webhook = w;
+  }
   if (up.calendars !== undefined) up.calendars = normCalendars(up.calendars);
   if (up.name !== undefined && !String(up.name).trim()) throw new HttpError(400, '프로젝트 이름은 비울 수 없습니다.');
   if (up.archived !== undefined) up.archived = !!up.archived;
   checkCategory(up.category);
   cleanAgreement(up);
   await db('projects').where({ id }).update({ ...up, updated_at: now() });
-  await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: before.name, changes: diff(before, up) });
+  // 웹후크 주소는 비밀번호처럼 다룸: 기록에는 바뀌었다는 것만
+  const ch = diff(before, up);
+  if (ch.teams_webhook) ch.teams_webhook = ch.teams_webhook.map(v => v ? '••••' : null);
+  await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: before.name, changes: ch });
   res.json(await loadProject(id));
+}));
+
+// Teams 채널 시험 보내기 (PM)
+projectsRouter.post('/:id/teams-test', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id, 'pm');
+  const p = await loadProject(id);
+  if (!p.teams_webhook) throw new HttpError(400, '먼저 Teams 웹후크 주소를 저장하세요.');
+  try { await postCard(p.teams_webhook, { title: `${p.name} · Teams 알림 시험`, lines: [`${req.user.name}님이 보낸 시험 알림입니다. 이 채널로 검토 요청·회의 초대·새 이슈와 하루 일정 요약이 옵니다.`] }); }
+  catch (e) { throw new HttpError(400, `Teams 로 보내지 못했습니다: ${e.message}`); }
+  res.json({ ok: true });
 }));
 
 projectsRouter.delete('/:id', ah(async (req, res) => {
