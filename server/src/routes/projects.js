@@ -188,7 +188,7 @@ projectsRouter.delete('/templates/:tid', ah(async (req, res) => {
 projectsRouter.get('/:id/data', ah(async (req, res) => {
   const id = Number(req.params.id);
   const project = await loadProject(id);
-  const [phases, tasks, deps, issues, members, role, hol, columns, checklist, baselines] = await Promise.all([
+  const [phases, tasks, deps, issues, members, role, hol, columns, checklist, baselines, events] = await Promise.all([
     db('phases').where({ project_id: id }).orderBy('sort'),
     db('tasks').where({ project_id: id }).orderBy([{ column: 'sort' }, { column: 'start' }]),
     db('dependencies').where({ project_id: id }),
@@ -198,7 +198,8 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
     db('holidays').whereIn('country', String(project.calendars || 'KR').split(',')).orderBy('date'),
     db('board_columns').where({ project_id: id }).orderBy('sort'),
     db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: id })).orderBy([{ column: 'task_id' }, { column: 'sort' }]),
-    db('baselines').where({ project_id: id }).orderBy('id', 'desc')
+    db('baselines').where({ project_id: id }).orderBy('id', 'desc'),
+    db('timeline_events').where({ project_id: id }).orderBy('start')
   ]);
   // 크리티컬 패스·여유일 (근무일 기준, 프로젝트 달력)
   const cal = project.day_basis === 'calendar' ? null : new Set(hol.map(h => h.date));
@@ -206,7 +207,7 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
   res.json({
     project: { ...project, archived: !!project.archived }, phases,
     tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
-    deps, issues, members, role, holidays: hol, baselines,
+    deps, issues, members, role, holidays: hol, baselines, events,
     columns: columns.map(c => ({ ...c, is_review: !!c.is_review })), checklist: checklist.map(c => ({ ...c, done: !!c.done }))
   });
 }));
@@ -235,6 +236,7 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
     await trx('task_checklist').whereIn('task_id', trx('tasks').select('id').where({ project_id: id })).del();
     await trx('baseline_tasks').whereIn('baseline_id', trx('baselines').select('id').where({ project_id: id })).del();
     await trx('baselines').where({ project_id: id }).del();
+    await trx('timeline_events').where({ project_id: id }).del();
     for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
@@ -395,6 +397,40 @@ projectsRouter.delete('/:id/baselines/:bid', ah(async (req, res) => {
     await trx('baselines').where({ id: bid }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'baseline', label: `기준선 삭제: ${b.name}` });
   });
+  res.json({ ok: true });
+}));
+
+// ---- 간트 머리 기간 표시 (우기, 검측 주간 등) ----
+function cleanEvent(b) {
+  const e = { name: String(b?.name || '').trim().slice(0, 100), start: optDate(b?.start, '시작일'), end: optDate(b?.end || b?.start, '종료일'), color: /^#[0-9a-f]{6}$/i.test(b?.color || '') ? b.color : '#d9822b' };
+  if (!e.name) throw new HttpError(400, '기간 이름을 입력하세요.');
+  if (!e.start || !e.end) throw new HttpError(400, '시작일과 종료일을 입력하세요.');
+  if (e.end < e.start) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
+  return e;
+}
+projectsRouter.post('/:id/events', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await need(req, id);
+  const e = cleanEvent(req.body);
+  const eid = await insertId(db, 'timeline_events', { ...e, project_id: id });
+  await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: `간트 기간 추가: ${e.name} (${e.start}~${e.end})` });
+  res.json(await db('timeline_events').where({ id: eid }).first());
+}));
+projectsRouter.patch('/:id/events/:eid', ah(async (req, res) => {
+  const id = Number(req.params.id), eid = Number(req.params.eid);
+  await need(req, id);
+  const ex = await db('timeline_events').where({ id: eid, project_id: id }).first();
+  if (!ex) throw new HttpError(404, '기간을 찾을 수 없습니다.');
+  await db('timeline_events').where({ id: eid }).update(cleanEvent({ ...ex, ...req.body }));
+  res.json(await db('timeline_events').where({ id: eid }).first());
+}));
+projectsRouter.delete('/:id/events/:eid', ah(async (req, res) => {
+  const id = Number(req.params.id), eid = Number(req.params.eid);
+  await need(req, id);
+  const ex = await db('timeline_events').where({ id: eid, project_id: id }).first();
+  if (!ex) throw new HttpError(404, '기간을 찾을 수 없습니다.');
+  await db('timeline_events').where({ id: eid }).del();
+  await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: `간트 기간 삭제: ${ex.name}` });
   res.json({ ok: true });
 }));
 

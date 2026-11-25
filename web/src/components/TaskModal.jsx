@@ -18,10 +18,18 @@ export default function TaskModal({ id, preset, onClose }) {
   const isCons = catOf(project.category).key === 'construction';
   const { user } = useApp();
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', est_hours: '', ...preset };
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', ...preset };
   const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
-    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', est_hours: x.est_hours ?? '' });
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
+  // 하위 작업(WBS): 자기 자신과 자기 하위 작업은 상위로 고를 수 없음
+  const kids = t ? tasks.filter(x => x.parent_id === t.id) : [];
+  const parentChoices = (() => {
+    if (!t) return tasks;
+    const bad = new Set([t.id]); let grow = true;
+    while (grow) { grow = false; for (const x of tasks) if (x.parent_id && bad.has(x.parent_id) && !bad.has(x.id)) { bad.add(x.id); grow = true; } }
+    return tasks.filter(x => !bad.has(x.id));
+  })();
   const isMeeting = f.type === '회의';
   // "자세히": 선행관계·기준 일정 등 고급 항목. 시공은 기본으로 펼침, 연구·설계는 접어 둠 (선택은 기억)
   const detKey = `task-detail-${isCons ? 'c' : 'x'}`;
@@ -45,7 +53,8 @@ export default function TaskModal({ id, preset, onClose }) {
     setErr(null); setBusy(true);
     const body = { ...f };
     for (const k of ['id', 'project_id', 'updated_at', 'updated_by', 'st', 'undated', 'created_at', 'board_order']) delete body[k];
-    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'est_hours']) if (body[k] === '') body[k] = null;
+    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'deadline', 'actual_start', 'est_hours']) if (body[k] === '') body[k] = null;
+    for (const k of ['float', 'crit']) delete body[k];
     if (body.type === '마일스톤' || body.type === '제출' || body.type === '지급') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
     if (body.type === '회의') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
     else { body.start_time = null; body.end_time = null; }
@@ -149,6 +158,16 @@ export default function TaskModal({ id, preset, onClose }) {
             <label>{tr('진행률')}</label>
             <div className="row"><input type="number" min="0" max="100" step="10" value={f.progress} onChange={set('progress')} style={{ width: 80 }} />%
               {f.status === '완료' && <>{tr('실제 완료일')} <DateInput value={f.actual_end || ''} onChange={set('actual_end')} /></>}</div>
+            {isCons && <>
+              <label>{tr('상위 작업 (WBS)')}</label>
+              <div className="row"><select value={f.parent_id} onChange={set('parent_id')} style={{ flex: 1 }}><option value="">{tr('(없음 · 맨 위 작업)')}</option>
+                {parentChoices.map(x => <option key={x.id} value={x.id}>{x.code ? x.code + ' ' : ''}{x.name}</option>)}</select></div>
+              {kids.length > 0 && <div className="full small">{tr('하위 작업 {n}개: 시작·종료일과 진행률은 하위 작업에서 자동으로 계산됩니다.', { n: kids.length })}</div>}
+              <label>{tr('마감 기한')}</label>
+              <div className="row"><DateInput value={f.deadline || ''} onChange={set('deadline')} />
+                {f.deadline && f.end && f.end > f.deadline ? <span className="slip">⚠ {tr('종료일이 마감 기한보다 {n}일 늦습니다.', { n: diff(f.deadline, f.end) })}</span> : <span className="small">{tr('계약·인허가 기한. 종료일이 넘으면 경고')}</span>}</div>
+              <label>{tr('실제 시작일')}</label><div className="row"><DateInput value={f.actual_start || ''} onChange={set('actual_start')} /></div>
+            </>}
             <label>{tr('최초 가능일')}</label><div className="row"><DateInput value={f.not_before || ''} onChange={set('not_before')} /><span className="small">{tr('자동 계산 시 이 날짜보다 앞당기지 않음')}</span></div>
             <label>{tr('기준 일정')}</label><div className="row"><DateInput value={f.baseline_start || ''} onChange={set('baseline_start')} /> ~ <DateInput value={f.baseline_end || ''} onChange={set('baseline_end')} />
               {t?.baseline_end && !t.undated && t.end !== t.baseline_end && <span className="small" style={{ color: t.end > t.baseline_end ? 'var(--late)' : 'var(--done)' }}>{tr('편차')} {diff(t.baseline_end, t.end) > 0 ? '+' : ''}{diff(t.baseline_end, t.end)}{tr('일')}</span>}</div>

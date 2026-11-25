@@ -337,8 +337,29 @@ const migrations = [
     }
   },
   {
+    // 시공 2·3순위(11/25): 마감일, 실제 시작일, 하위 작업(WBS), 간트 머리 기간 표시
+    name: '012_construction_more',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.string('deadline', 10); // 마감일: 종료일이 이 날을 넘으면 경고
+        t.string('actual_start', 10); // 실제 시작일 (주간 진척 입력)
+        t.integer('parent_id'); // 상위 작업 (하위 작업이 있으면 요약 작업)
+        t.index(['parent_id']);
+      });
+      await k.schema.createTable('timeline_events', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.string('name', 100).notNullable();
+        t.string('start', 10).notNullable();
+        t.string('end', 10).notNullable();
+        t.string('color', 9).notNullable().defaultTo('#d9822b');
+        t.index(['project_id']);
+      });
+    }
+  },
+  {
     // 설계 1순위(11/25): 예상 시간·사람별 업무량, 단계 제출일, 프로젝트 템플릿
-    name: '012_design_workload',
+    name: '013_design_workload',
     async up(k) {
       await k.schema.alterTable('tasks', t => {
         t.float('est_hours'); // 예상 시간 (선택 입력, 업무량 계산용)
