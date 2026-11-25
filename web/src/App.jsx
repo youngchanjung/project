@@ -4,7 +4,7 @@ import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'reac
 import { PALETTE, CATEGORIES, personColor } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
-import Home, { CategoryPage } from './pages/Home.jsx';
+import Home, { CategoryPage, ProjectsHome } from './pages/Home.jsx';
 import MyTasks from './pages/MyTasks.jsx';
 import Project from './pages/Project.jsx';
 import Admin from './pages/Admin.jsx';
@@ -76,6 +76,7 @@ export default function App() {
           <nav className="side-nav">
             <NavLink to="/" end className="snav"><span className="ico">🏠</span>{tr('홈')}</NavLink>
             <NavLink to="/my" className="snav"><span className="ico">✅</span>{tr('내 할 일')}</NavLink>
+            <NavLink to="/projects" end className="snav"><span className="ico">📁</span>{tr('프로젝트')}</NavLink>
             {user.role === 'admin' && <NavLink to="/admin" className="snav"><span className="ico">⚙️</span>{tr('관리')}</NavLink>}
           </nav>
           <SideProjects />
@@ -97,6 +98,7 @@ export default function App() {
           <Routes key={lang}>
             <Route path="/" element={<Home />} />
             <Route path="/my" element={<MyTasks />} />
+            <Route path="/projects" element={<ProjectsHome />} />
             <Route path="/c/:cat" element={<CategoryPage />} />
             <Route path="/projects/:id/*" element={<Project />} />
             <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
