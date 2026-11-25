@@ -99,6 +99,14 @@ authRouter.post('/password', requireLogin, ah(async (req, res) => {
   res.json({ ok: true });
 }));
 
+// 내 알림 설정: 메일로도 받기
+authRouter.post('/prefs', requireLogin, ah(async (req, res) => {
+  const up = {};
+  if (req.body?.email_notify !== undefined) up.email_notify = !!req.body.email_notify;
+  if (Object.keys(up).length) await db('users').where({ id: req.user.id }).update(up);
+  res.json({ user: publicUser({ ...req.user, ...up }) });
+}));
+
 // 화면 언어 저장
 authRouter.post('/lang', requireLogin, ah(async (req, res) => {
   const lang = String(req.body?.lang || '');

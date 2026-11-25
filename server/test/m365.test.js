@@ -10,6 +10,8 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-m365-'));
 process.env.DB_CLIENT = 'sqlite';
 process.env.DATA_DIR = tmp;
 process.env.SESSION_SECRET = 'test';
+process.env.M365_MAIL_DELAY_MS = '0';
+const wait = (ms = 150) => new Promise(r => setTimeout(r, ms));
 
 // ---- 가짜 Microsoft (로그인·Graph·Teams 웹후크) ----
 const ms = { nonce: null, calls: [], events: new Map(), seq: 0, mails: [], teams: [] };
@@ -56,6 +58,7 @@ before(async () => {
   Object.assign(config.m365, { tenantId: '11111111-2222-3333-4444-555555555555', clientId: 'cid', clientSecret: 'sec', mailFrom: 'schedule@corp.test',
     loginBase: mbase, graphBase: `${mbase}/v1.0`, redirectUri: 'http://app.test/api/auth/m365/callback' });
   ms.base = mbase;
+  config.publicUrl = 'http://app.test';
   const { prepareDb } = await import('../src/migrate.js');
   const { createApp } = await import('../src/index.js');
   await prepareDb();
@@ -96,4 +99,31 @@ test('회사 계정 로그인: 처음 로그인하면 직원 자동 등록, 메�
   assert.equal((await call('POST', '/api/auth/login', { username: 'admin', password: 'admin1234' })).status, 200);
   config.m365.localLogin = 'all';
   cookie = keep;
+});
+
+test('메일 알림: 담당 지정 알림을 메일로, 끄면 안 보냄, 메일 없는 사람은 건너뜀', async () => {
+  const lee = (await call('POST', '/api/users', { username: 'lee', name: '이수진', password: 'pass12345', email: 'lee@corp.test' })).body;
+  const noMail = (await call('POST', '/api/users', { username: 'park', name: '박', password: 'pass12345' })).body;
+  const p = (await call('POST', '/api/projects', { name: '메일 시험', category: 'design' })).body;
+  ms.mails.length = 0;
+  const t = (await call('POST', `/api/projects/${p.id}/tasks`, { name: '평면도', start: '2026-12-01', end: '2026-12-03', assignee_id: lee.id })).body.task;
+  await call('POST', `/api/projects/${p.id}/tasks`, { name: '입면도', start: '2026-12-01', end: '2026-12-03', assignee_id: noMail.id });
+  await wait();
+  assert.equal(ms.mails.length, 1);
+  const m = ms.mails[0];
+  assert.equal(m.from, 'schedule@corp.test');
+  assert.equal(m.toRecipients[0].emailAddress.address, 'lee@corp.test');
+  assert.match(m.subject, /메일 시험 · 평면도/);
+  assert.match(m.body.content, /관리자님이 나를 작업 담당자로 지정했습니다/);
+  assert.match(m.body.content, new RegExp(`http://app.test/projects/${p.id}/tasks\\?open=${t.id}`));
+  // 받는 사람이 메일 끄기
+  const keep = cookie;
+  await call('POST', '/api/auth/login', { username: 'lee', password: 'pass12345' });
+  assert.equal((await call('POST', '/api/auth/prefs', { email_notify: false })).body.user.email_notify, false);
+  cookie = keep;
+  ms.mails.length = 0;
+  await call('PATCH', `/api/projects/${p.id}/tasks/${t.id}`, { assignee_id: null });
+  await call('PATCH', `/api/projects/${p.id}/tasks/${t.id}`, { assignee_id: lee.id });
+  await wait();
+  assert.equal(ms.mails.length, 0);
 });

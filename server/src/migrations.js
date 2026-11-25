@@ -468,6 +468,39 @@ const migrations = [
     async up(k) {
       await k.schema.alterTable('departments', t => { t.string('categories', 60); });
     }
+  },
+  {
+    // M365·Teams 연동(3단계): 메일 알림 받기, Teams 회의, 프로젝트 Teams 채널, Outlook 일정 연결 기록
+    name: '019_m365',
+    async up(k) {
+      await k.schema.alterTable('users', t => { t.boolean('email_notify').notNullable().defaultTo(true); });
+      await k.schema.alterTable('tasks', t => { t.boolean('teams_meeting').notNullable().defaultTo(false); });
+      await k.schema.alterTable('projects', t => { t.string('teams_webhook', 1000); });
+      await k.schema.alterTable('notifications', t => { t.string('mailed_at', 32); });
+      // 작업 ↔ Outlook 일정 (사서함마다 하나). hash 가 같으면 다시 보내지 않음
+      await k.schema.createTable('m365_links', t => {
+        t.increments('id');
+        t.integer('task_id').notNullable();
+        t.integer('project_id').notNullable();
+        t.string('mailbox', 200).notNullable();
+        t.string('event_id', 400);
+        t.string('hash', 64);
+        t.string('synced_at', 32);
+        t.string('error', 500);
+        t.unique(['task_id', 'mailbox']);
+        t.index(['project_id']);
+      });
+      // 연동 기록 (메일·일정·Teams 보내기 결과, 최근 것만 보관). dedupe 는 Teams 하루 알림 중복 방지
+      await k.schema.createTable('m365_log', t => {
+        t.increments('id');
+        t.string('at', 32).notNullable();
+        t.string('kind', 20).notNullable(); // mail | outlook | teams
+        t.boolean('ok').notNullable();
+        t.string('message', 500);
+        t.string('dedupe', 200);
+        t.index(['dedupe']);
+      });
+    }
   }
 ];
 

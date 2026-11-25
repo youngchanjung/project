@@ -24,6 +24,7 @@ import { issuesRouter } from './routes/issues.js';
 import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
+import { startScheduler } from './scheduler.js';
 
 export function createApp() {
   const app = express();
@@ -102,4 +103,5 @@ if (isMain) {
     console.log(`일정관리 서버 시작: ${tls ? 'https' : 'http'}://localhost:${config.port}  (DB: ${config.dbClient === 'pg' ? 'PostgreSQL' : config.sqliteFile})`);
   });
   resumeMeetings().catch(e => console.error('회의록 처리 재개 실패', e));
+  startScheduler();
 }
