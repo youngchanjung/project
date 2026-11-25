@@ -38,13 +38,16 @@ export const config = {
   backupCopyDir: process.env.BACKUP_COPY_DIR ? path.resolve(ROOT, process.env.BACKUP_COPY_DIR) : null,
   // DeepL 번역 (입력 내용 번역). 키가 없으면 번역 기능만 꺼지고 나머지는 그대로 동작
   deeplKey: process.env.DEEPL_API_KEY || '',
-  // 회의록: 음성인식(리턴제로 RTZR)과 AI 정리(Claude). 키가 없으면 해당 기능만 꺼짐
-  rtzrClientId: process.env.RTZR_CLIENT_ID || '',
-  rtzrClientSecret: process.env.RTZR_CLIENT_SECRET || '',
+  // 회의록: 음성인식(Microsoft Azure Speech)과 AI 정리(Claude). 키가 없으면 해당 기능만 꺼짐
+  azureSpeechKey: process.env.AZURE_SPEECH_KEY || '',
+  azureSpeechRegion: (process.env.AZURE_SPEECH_REGION || '').trim(),
+  azureSpeechEndpoint: (process.env.AZURE_SPEECH_ENDPOINT || '').trim(),
+  azureSpeechApiVersion: process.env.AZURE_SPEECH_API_VERSION || '2025-10-15',
+  azureMaxSpeakers: Math.min(35, Math.max(2, Number(process.env.AZURE_MAX_SPEAKERS || 10))),
   anthropicKey: process.env.ANTHROPIC_API_KEY || '',
   minutesModel: process.env.MINUTES_AI_MODEL || 'claude-opus-5-5',
   meetingsDir: path.resolve(ROOT, process.env.MEETINGS_DIR || path.join(dataDir, 'meetings')),
-  maxAudioMB: Math.max(10, Number(process.env.MEETING_MAX_MB || 1024)),
+  maxAudioMB: Math.max(10, Number(process.env.MEETING_MAX_MB || 500)),
   // HTTPS (브라우저 녹음은 https 또는 localhost 에서만 동작). pfx 파일 또는 cert/key 파일
   httpsPfx: process.env.HTTPS_PFX ? path.resolve(ROOT, process.env.HTTPS_PFX) : null,
   httpsPassphrase: process.env.HTTPS_PASSPHRASE || '',

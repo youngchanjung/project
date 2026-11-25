@@ -1,11 +1,11 @@
-// 브라우저 녹음. 음성인식(리턴제로)이 받는 형식으로 저장합니다: m4a(AAC, 크롬·엣지·사파리) 또는 wav(16kHz 모노, 그 밖)
+// 브라우저 녹음. 음성인식(Azure Speech)이 받는 형식으로 저장합니다: webm(Opus, 크롬·엣지·파이어폭스) 또는 wav(16kHz 모노, 그 밖)
 // 마이크는 https 또는 localhost 로 접속했을 때만 쓸 수 있습니다 (브라우저 보안 규칙).
 import { useEffect, useRef, useState } from 'react';
 import { tr } from '../i18n.js';
 
-const MP4_TYPES = ['audio/mp4;codecs=mp4a.40.2', 'audio/mp4'];
+const REC_TYPES = [['audio/webm;codecs=opus', '.webm'], ['audio/ogg;codecs=opus', '.ogg']];
 export const canRecord = () => !!(window.isSecureContext && navigator.mediaDevices?.getUserMedia);
-const pickMp4 = () => (window.MediaRecorder ? MP4_TYPES.find(t => MediaRecorder.isTypeSupported(t)) : null);
+const pickType = () => (window.MediaRecorder ? REC_TYPES.find(([t]) => MediaRecorder.isTypeSupported(t)) || null : null);
 
 function encodeWav(chunks, rate) {
   const len = chunks.reduce((n, c) => n + c.length, 0);
@@ -51,22 +51,22 @@ export default function Recorder({ onDone, disabled }) {
     let stream;
     try { stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, channelCount: 1 } }); }
     catch (e) { setErr(tr('마이크를 사용할 수 없습니다. 브라우저의 마이크 권한을 확인하세요.')); return; }
-    const x = { stream, chunks: [], mp4: pickMp4(), paused: false };
-    // 소리 크기 표시 + (m4a 를 못 쓰는 브라우저는) wav 로 직접 녹음
+    const x = { stream, chunks: [], enc: pickType(), paused: false };
+    // 소리 크기 표시 + (webm 을 못 쓰는 브라우저는) wav 로 직접 녹음
     let ctx;
-    try { ctx = new AudioContext(x.mp4 ? {} : { sampleRate: 16000 }); } catch { ctx = new AudioContext(); }
+    try { ctx = new AudioContext(x.enc ? {} : { sampleRate: 16000 }); } catch { ctx = new AudioContext(); }
     const src = ctx.createMediaStreamSource(stream);
     const proc = ctx.createScriptProcessor(4096, 1, 1);
     proc.onaudioprocess = e => {
       const d = e.inputBuffer.getChannelData(0);
       let peak = 0; for (let i = 0; i < d.length; i += 16) peak = Math.max(peak, Math.abs(d[i]));
       x.peak = peak;
-      if (!x.mp4 && !x.paused) x.chunks.push(new Float32Array(d));
+      if (!x.enc && !x.paused) x.chunks.push(new Float32Array(d));
     };
     src.connect(proc); proc.connect(ctx.destination);
     x.ctx = ctx; x.rate = ctx.sampleRate;
-    if (x.mp4) {
-      x.rec = new MediaRecorder(stream, { mimeType: x.mp4, audioBitsPerSecond: 64000 });
+    if (x.enc) {
+      x.rec = new MediaRecorder(stream, { mimeType: x.enc[0], audioBitsPerSecond: 48000 });
       x.rec.ondataavailable = e => e.data.size && x.chunks.push(e.data);
       x.rec.start(1000);
     }
@@ -91,7 +91,7 @@ export default function Recorder({ onDone, disabled }) {
     let file;
     if (x.rec) {
       await new Promise(res => { x.rec.onstop = res; x.rec.stop(); });
-      file = new File(x.chunks, `${tr('회의녹음')}_${stamp}.m4a`, { type: 'audio/mp4' });
+      file = new File(x.chunks, `${tr('회의녹음')}_${stamp}${x.enc[1]}`, { type: x.enc[0].split(';')[0] });
     } else {
       file = new File([encodeWav(x.chunks, x.rate)], `${tr('회의녹음')}_${stamp}.wav`, { type: 'audio/wav' });
     }
