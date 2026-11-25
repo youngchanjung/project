@@ -4,6 +4,7 @@ import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, projectCalendar, isDate } from '../util.js';
 import { requireLogin, requireAdmin } from '../auth.js';
 import { parseWorkbooks, buildExport } from '../excel.js';
+import { isScheduleFile, parseMSProjectXML, parseXER, fillSummaryDates } from '../schedfile.js';
 import { recalc, stateOf } from '../schedule.js';
 import { need, loadProject } from './projects.js';
 import { COUNTRIES, isCountry } from '../countries.js';
@@ -25,13 +26,25 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
   await need(req, pid, 'pm');
   if (!req.files?.length) throw new HttpError(400, '엑셀 파일을 선택하세요.');
   let parsed;
-  try { parsed = parseWorkbooks(req.files.map(f => f.buffer)); }
+  const fname = f => Buffer.from(f.originalname || '', 'latin1').toString('utf8');
+  // 일정 파일(MS Project XML · P6 XER)과 엑셀을 나눠 읽고 합침
+  const schedFiles = req.files.filter(f => isScheduleFile(fname(f), f.buffer)), books = req.files.filter(f => !schedFiles.includes(f));
+  try { parsed = books.length ? parseWorkbooks(books.map(f => f.buffer)) : { phases: [], tasks: [], deps: [], issues: [], holidays: [], sheets: [] }; }
   catch (e) { throw new HttpError(400, `엑셀을 읽지 못했습니다: ${e.message}`); }
-  if (!parsed.sheets.length) throw new HttpError(400, '인식할 수 있는 시트가 없습니다. (계약 Detail 시트, 일정표_Schedule, 이슈로그_IssueLog, 또는 이 프로그램에서 내보낸 파일)');
+  parsed.skipped = [];
+  for (const f of schedFiles) {
+    let o;
+    try { o = isScheduleFile(fname(f), f.buffer) === 'xer' ? parseXER(f.buffer) : parseMSProjectXML(f.buffer); }
+    catch (e) { throw new HttpError(400, `일정 파일을 읽지 못했습니다 (${fname(f)}): ${e.message}`); }
+    for (const k of ['phases', 'sheets']) for (const v of o[k]) if (!parsed[k].includes(v)) parsed[k].push(v);
+    for (const k of ['tasks', 'deps', 'skipped']) parsed[k].push(...o[k]);
+  }
+  fillSummaryDates(parsed);
+  if (!parsed.sheets.length) throw new HttpError(400, '인식할 수 있는 시트가 없습니다. (계약 Detail 시트, 일정표_Schedule, 이슈로그_IssueLog, 이 프로그램에서 내보낸 파일, MS Project XML, Primavera P6 XER)');
   const dryRun = req.body?.dryRun === '1' || req.body?.dryRun === 'true';
 
   const summary = await db.transaction(async trx => {
-    const sum = { sheets: parsed.sheets, phases: 0, tasksAdded: 0, tasksUpdated: 0, deps: 0, depsSkipped: [], issuesAdded: 0, issuesUpdated: 0, holidays: 0, shifted: 0 };
+    const sum = { skipped: parsed.skipped.slice(0, 50), sheets: parsed.sheets, phases: 0, tasksAdded: 0, tasksUpdated: 0, deps: 0, depsSkipped: [], issuesAdded: 0, issuesUpdated: 0, holidays: 0, shifted: 0 };
     // 공휴일
     for (const h of parsed.holidays) {
       const ex = await trx('holidays').where({ country: h.country, date: h.date }).first();
@@ -57,7 +70,7 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
     const existing = await trx('tasks').where({ project_id: pid });
     const byCode = new Map(existing.filter(t => t.code).map(t => [t.code, t]));
     let tsort = existing.reduce((m, t) => Math.max(m, t.sort), 0);
-    const FIELDS = ['name', 'name_en', 'type', 'owner', 'company', 'trade', 'start', 'end', 'baseline_end', 'actual_end', 'not_before', 'status', 'is_key', 'ref', 'note'];
+    const FIELDS = ['name', 'name_en', 'type', 'owner', 'company', 'trade', 'start', 'end', 'baseline_start', 'baseline_end', 'actual_start', 'actual_end', 'not_before', 'deadline', 'progress', 'status', 'is_key', 'ref', 'note'];
     for (const t of parsed.tasks) {
       const row = { phase_id: t.phase ? phaseId.get(t.phase) : null };
       for (const f of FIELDS) if (t[f] !== undefined) row[f] = t[f] ?? null;
@@ -71,6 +84,12 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
         if (t.code) byCode.set(t.code, { id, code: t.code });
         sum.tasksAdded++;
       }
+    }
+    // 상위 작업(WBS): 파일에 상위가 있는 작업만 연결
+    for (const t of parsed.tasks) {
+      if (t.parentCode === undefined || !t.code) continue;
+      const me = byCode.get(t.code), par = t.parentCode ? byCode.get(t.parentCode) : null;
+      if (me) await trx('tasks').where({ id: me.id }).update({ parent_id: par?.id ?? null });
     }
     // 선행관계: 불러온 작업의 선행관계는 파일 내용으로 교체
     const succCodes = new Set(parsed.deps.map(d => d.succ));
@@ -113,7 +132,8 @@ importRouter.post('/', upload.array('files'), ah(async (req, res) => {
       throw Object.assign(new Error('dry-run'), { dryRunSummary: sum });
     }
     if (req.body?.recalc === '1') sum.shifted = (await applyRecalc(trx, pid, req.user)).length;
-    await audit(trx, { user: req.user, projectId: pid, entity: 'project', entityId: pid, action: 'import', label: `엑셀 불러오기: ${req.files.map(f => Buffer.from(f.originalname, 'latin1').toString('utf8')).join(', ')} (작업 +${sum.tasksAdded}/갱신 ${sum.tasksUpdated}, 이슈 +${sum.issuesAdded}/갱신 ${sum.issuesUpdated})` });
+    else if (parsed.tasks.some(t => t.parentCode)) await applyRecalc(trx, pid, req.user, { rollupOnly: true });
+    await audit(trx, { user: req.user, projectId: pid, entity: 'project', entityId: pid, action: 'import', label: `${schedFiles.length ? '일정 파일' : '엑셀'} 불러오기: ${req.files.map(fname).join(', ')} (작업 +${sum.tasksAdded}/갱신 ${sum.tasksUpdated}, 이슈 +${sum.issuesAdded}/갱신 ${sum.issuesUpdated})` });
     return sum;
   }).catch(e => { if (e.dryRunSummary) return { ...e.dryRunSummary, dryRun: true }; throw e; });
   res.json(summary);

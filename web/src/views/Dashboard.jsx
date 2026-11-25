@@ -33,6 +33,7 @@ export default function Dashboard() {
   const done = ts.filter(t => t.st === '완료').length;
   // 시공: 크리티컬 패스·기준선 대비 지연
   const crit = ts.filter(t => t.crit).sort((a, b) => a.start.localeCompare(b.start));
+  const dlOver = ts.filter(t => t.deadline && t.end > t.deadline && t.st !== '완료');
   const slipped = ts.map(t => { const b = bl(t); return b ? { t, n: diff(b.end, t.end) } : null; }).filter(x => x && x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
@@ -54,6 +55,7 @@ export default function Dashboard() {
         <div className="kpi late">{tr('지연 이슈')}<b>{il.length}</b><span className="small">{tr('미해결')} {io.length}{tr('건 중')}</span></div>
         {isCons && <div className="kpi late">{tr('크리티컬 작업')}<b style={{ color: 'var(--crit)' }}>{crit.length}</b><span className="small">{tr('여유 0일')}</span></div>}
         {isCons && <div className="kpi late">{tr('기준선보다 늦음')}<b>{slipped.length}</b>{slipped[0] && <span className="small">{tr('최대 +{n}일', { n: slipped[0].n })}</span>}</div>}
+        {isCons && dlOver.length > 0 && <div className="kpi late">{tr('마감 기한 초과')}<b>{dlOver.length}</b><span className="small">{dlOver.slice(0, 2).map(t => t.code || t.name).join(', ')}</span></div>}
         <div className="kpi done">{tr('완료')}<b>{done}</b><span className="small">{tr('전체 {n}건', { n: ts.length })} ({ts.length ? Math.round(done / ts.length * 100) : 0}%)</span></div>
       </div>
       <div className="grid2">

@@ -441,3 +441,28 @@ tr.sel td{background:var(--accent-soft)}
   .latab .lname,.latab thead th{position:static}
   body{background:#fff}
 }
+/* 시공: 하위 작업(WBS) 요약 막대, 마감 기한, 간트 기간 표시 */
+.gwbs{position:absolute;top:13px;height:12px;background:color-mix(in srgb,var(--text) 22%,var(--panel));border-radius:2px;cursor:pointer;min-width:4px}
+.gwbs::before,.gwbs::after{content:"";position:absolute;bottom:-6px;border:5px solid transparent;border-top-color:var(--text);opacity:.7}
+.gwbs::before{left:-5px}.gwbs::after{right:-5px}
+.gwbs>i{display:block;height:100%;background:var(--text);opacity:.55;border-radius:2px}
+.gwbs.crit{box-shadow:0 0 0 2px var(--panel),0 0 0 4px var(--crit)}
+.gc.name.gsumname{font-weight:700}
+.gc.name .gtog{display:inline-block;width:18px;text-align:center;cursor:pointer;color:var(--muted)}
+.gdl{position:absolute;top:1px;width:0;height:0;border:6px solid transparent;border-top:9px solid var(--muted);z-index:2;pointer-events:auto}
+.gdl.over{border-top-color:var(--late)}
+.gev{position:absolute;top:61px;height:21px;background:color-mix(in srgb,var(--k) 22%,var(--panel));border:1px solid var(--k);border-radius:4px;font-size:calc(14px*var(--fs));font-weight:600;padding:0 5px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:19px}
+.dlover{color:var(--late);font-weight:700}
+/* 진척 입력 */
+.prog-tab input[type=number]{width:72px}
+.prog-tab tr.dirty td{background:color-mix(in srgb,var(--accent) 7%,var(--panel))}
+.bulkbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;padding:10px 12px;margin:0 0 10px;border:1px solid var(--accent);border-radius:10px;background:var(--accent-soft)}
+.bulkbar input[type=text]{width:140px}
+@media print{
+  body.print-gantt{zoom:.62}
+  body.print-gantt .gwrap{overflow:visible;max-height:none;border:none}
+  body.print-gantt .ghead{position:static}
+  body.print-gantt .glabel{position:static}
+  body.print-gantt .addrow{display:none}
+  @page{size:A3 landscape;margin:10mm}
+}
