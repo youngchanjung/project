@@ -6,7 +6,8 @@ import { useApp } from '../App.jsx';
 import History from '../components/History.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { ROLE_NAME, PALETTE } from '../util.js';
+import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS } from '../util.js';
+import { Tx } from '../contentTr.jsx';
 import { tr } from '../i18n.js';
 
 export default function Settings() {
@@ -15,6 +16,7 @@ export default function Settings() {
     <div className="grid2">
       <Info />
       <Members />
+      <BoardColumns />
       <Phases />
       <ImportExport />
       {can('pm') && <Baseline />}
@@ -33,7 +35,7 @@ function Info() {
   const set = k => e => setF({ ...f, [k]: e.target.value });
   const ed = can('pm');
   const save = async patch => {
-    try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
+    try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis, category: f.category }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
     catch (e) { setErr(e.message); }
   };
   const [delOpen, setDelOpen] = useState(false);
@@ -41,6 +43,9 @@ function Info() {
     <div className="card"><h3>{tr('프로젝트 정보')}</h3>
       {err && <div className="err">{err}</div>}
       <fieldset disabled={!ed} style={{ border: 0, padding: 0, margin: 0 }}><div className="form">
+        <label>{tr('카테고리')}</label>
+        <div className="row"><select value={f.category || 'construction'} onChange={set('category')}>{CATEGORIES.map(c => <option key={c.key} value={c.key}>{c.icon} {tr(c.name)}</option>)}</select>
+          <span className="small">{tr(CATEGORIES.find(c => c.key === (f.category || 'construction')).desc)}</span></div>
         <label>{tr('이름')}</label><input type="text" value={f.name} onChange={set('name')} />
         <label>{tr('코드')}</label><input type="text" value={f.code || ''} onChange={set('code')} />
         <label>{tr('발주처·협력처')}</label><input type="text" value={f.client || ''} onChange={set('client')} />
@@ -150,6 +155,42 @@ function Phases() {
       {ed && <div className="toolbar" style={{ marginTop: 10 }}>
         <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={tr('새 단계 이름')} />
         <button className="btn primary" onClick={() => name.trim() && call(async () => { await api.post(`/projects/${project.id}/phases`, { name, color: PALETTE[phases.length % PALETTE.length] }); setName(''); })}>{tr('추가')}</button>
+      </div>}
+    </div>
+  );
+}
+
+// 칸반 열: 이름·색·놓았을 때 바뀌는 상태·순서
+function BoardColumns() {
+  const { project, columns, can, reload } = useProject();
+  const [name, setName] = useState('');
+  const [err, setErr] = useState(null);
+  const ed = can('pm');
+  const url = `/projects/${project.id}/columns`;
+  const call = async fn => { try { await fn(); await reload(); setErr(null); } catch (e) { setErr(e.message); } };
+  const move = (c, dir) => {
+    const ids = columns.map(x => x.id), i = ids.indexOf(c.id), j = i + dir;
+    if (j < 0 || j >= ids.length) return;
+    [ids[i], ids[j]] = [ids[j], ids[i]];
+    call(() => api.put(`/projects/${project.id}/columns-order`, { ids }));
+  };
+  return (
+    <div className="card"><h3>{tr('칸반 열')} <span className="small">{tr('카드를 이 열에 놓으면 작업 상태가 오른쪽 상태로 바뀝니다.')}</span></h3>
+      {err && <div className="err">{err}</div>}
+      <table><thead><tr><th /><th>{tr('열 이름')}</th><th>{tr('놓으면 상태')}</th><th title={tr('검토 열: 2단계에서 검토자 알림·승인/반려와 연결됩니다.')}>{tr('검토')}</th><th /></tr></thead>
+        <tbody>{columns.map((c, i) => (
+          <tr key={c.id}>
+            <td style={{ width: 40 }}>{ed ? <input type="color" value={c.color || '#8a93a6'} onChange={e => call(() => api.patch(`${url}/${c.id}`, { color: e.target.value }))} style={{ width: 30, padding: 0, border: 0 }} /> : <span className="dot" style={{ background: c.color }} />}</td>
+            <td>{ed ? <input type="text" defaultValue={tr(c.name)} onBlur={e => e.target.value.trim() && e.target.value !== tr(c.name) && call(() => api.patch(`${url}/${c.id}`, { name: e.target.value }))} /> : <Tx>{tr(c.name)}</Tx>}</td>
+            <td>{ed ? <select value={c.status} onChange={e => call(() => api.patch(`${url}/${c.id}`, { status: e.target.value }))}>{TASK_STATUS.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select> : tr(c.status)}</td>
+            <td><input type="checkbox" checked={!!c.is_review} disabled={!ed} onChange={e => call(() => api.patch(`${url}/${c.id}`, { is_review: e.target.checked }))} /></td>
+            <td className="nw">{ed && <>
+              <button className="btn sm" onClick={() => move(c, -1)} disabled={i === 0}>←</button> <button className="btn sm" onClick={() => move(c, 1)} disabled={i === columns.length - 1}>→</button>{' '}
+              <button className="btn sm danger" disabled={columns.length <= 1} onClick={() => confirm(tr("'{name}' 열을 삭제할까요? 카드는 지워지지 않고 상태가 같은 다른 열로 옮겨집니다.", { name: tr(c.name) })) && call(() => api.del(`${url}/${c.id}`))}>{tr('삭제')}</button></>}</td>
+          </tr>))}</tbody></table>
+      {ed && <div className="toolbar" style={{ marginTop: 10 }}>
+        <input type="text" value={name} onChange={e => setName(e.target.value)} placeholder={tr('새 열 이름 (예: 보류, 발주처 확인)')} />
+        <button className="btn primary" onClick={() => name.trim() && call(async () => { await api.post(url, { name, status: '진행중', color: PALETTE[columns.length % PALETTE.length] }); setName(''); })}>{tr('추가')}</button>
       </div>}
     </div>
   );

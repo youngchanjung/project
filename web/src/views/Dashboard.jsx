@@ -18,7 +18,8 @@ export function TaskRow({ t, right }) {
 }
 
 export default function Dashboard() {
-  const { filtered: ts, issues, holidays, td, openIssue, phases, tasks, deps, project, toast } = useProject();
+  const { filtered: all, issues, holidays, td, openIssue, phases, tasks, deps, project, toast } = useProject();
+  const ts = all.filter(t => !t.undated); // 날짜 없는 할 일은 칸반·할 일 목록에서만
   const wk = addD(td, 7);
   const late = ts.filter(t => t.st === '지연').sort((a, b) => a.end.localeCompare(b.end));
   const prog = ts.filter(t => t.st === '진행중').sort((a, b) => a.end.localeCompare(b.end));

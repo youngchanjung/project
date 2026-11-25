@@ -225,3 +225,57 @@ td input,td select{width:100%;padding:2px 5px;font-size:16px}
 .spk{font-size:12.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .spk0{color:#2f6fde}.spk1{color:#2e9e5b}.spk2{color:#d98a00}.spk3{color:#8e5bd8}.spk4{color:#d6453d}.spk5{color:#0f8f9a}
 @media(max-width:600px){.tline{grid-template-columns:40px 1fr}.tline span{grid-column:1/-1}}
+
+/* ---- 카테고리 (연구·시공·설계) ---- */
+.catbadge{display:inline-flex;align-items:center;gap:3px;font-size:13px;font-weight:700;color:var(--c);background:color-mix(in srgb,var(--c) 13%,transparent);border-radius:6px;padding:1px 7px;margin-right:8px;vertical-align:3px;white-space:nowrap}
+.catcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:14px;margin-bottom:20px}
+.catcard{display:flex;flex-direction:column;gap:6px;color:var(--text);border-top:4px solid var(--c)}
+.catcard:hover{border-color:var(--c);box-shadow:0 2px 10px rgba(0,0,0,.06)}
+.cc-h{display:flex;align-items:center;gap:8px;font-size:18px}.cc-h .small{margin-left:auto}
+.cc-ico{font-size:22px}
+.cc-stats{display:flex;gap:14px;flex-wrap:wrap;margin-top:4px}
+.cc-stats span{display:flex;flex-direction:column;font-size:13.5px;color:var(--muted)}
+.cc-stats b{font-size:22px;color:var(--text);line-height:1.2}.cc-stats .late b{color:var(--late)}
+.catpick{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-bottom:14px}
+@media(max-width:600px){.catpick{grid-template-columns:1fr}}
+.catopt{display:flex;flex-direction:column;align-items:flex-start;gap:3px;text-align:left;border:2px solid var(--line);background:var(--panel);border-radius:10px;padding:10px 12px;cursor:pointer}
+.catopt:hover{border-color:var(--c)}
+.catopt.on{border-color:var(--c);background:color-mix(in srgb,var(--c) 9%,var(--panel))}
+.catopt b{font-size:17px}
+.linkbtn{border:0;background:none;color:var(--accent);cursor:pointer;padding:2px 0;font-size:15px}
+
+/* ---- 칸반 ---- */
+.kanban{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:12px;min-height:60vh}
+.kcol{flex:0 0 272px;background:var(--wkend-strong);border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 230px)}
+.kcol.over{outline:2px dashed var(--accent);outline-offset:-2px}
+.kcol-h{display:flex;align-items:center;gap:7px;padding:10px 12px 6px;font-size:16px}
+.kcnt{background:var(--panel);color:var(--muted);border-radius:9px;padding:0 7px;font-size:13px;font-weight:700}
+.kcol-body{flex:1;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:8px;min-height:60px}
+.kempty{border:2px dashed var(--line);border-radius:9px;color:var(--muted);font-size:14px;text-align:center;padding:14px 6px}
+.kcard-wrap{touch-action:manipulation;outline:none;border-radius:9px}
+.kcard-wrap:focus-visible{box-shadow:0 0 0 2px var(--accent)}
+.kcard-wrap.ghost .kcard{opacity:.35;border-style:dashed}
+.kcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:grab;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.kcard:hover{border-color:var(--accent)}
+.kcard.dragging{cursor:grabbing;box-shadow:0 10px 24px rgba(0,0,0,.18);transform:rotate(1.5deg)}
+.kcard.done .kt{text-decoration:line-through;color:var(--muted)}
+.kt{font-size:15.5px;line-height:1.35;word-break:break-word}
+.kprio{font-size:12.5px;font-weight:700}
+.ktags{display:flex;flex-wrap:wrap;gap:4px}
+.ktag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:5px;font-size:12.5px;padding:0 6px;margin:1px 3px 1px 0}
+.kmeta{display:flex;align-items:center;gap:8px;font-size:13px;color:var(--muted)}
+.kdue.late{color:var(--late);font-weight:700}.kdue.soon{color:var(--soon);font-weight:700}
+.kchk.all{color:var(--done)}
+.avatar.sm{width:22px;height:22px;font-size:12px}
+.kadd{border:0;background:none;color:var(--muted);text-align:left;padding:8px 14px 12px;cursor:pointer;font-size:15px;border-radius:0 0 12px 12px}
+.kadd:hover{color:var(--accent);background:var(--hover)}
+.kadd-form{padding:6px 8px 10px;display:flex;flex-direction:column;gap:4px}
+.kadd-form input{width:100%}
+@media(max-width:700px){.kcol{flex-basis:82vw}}
+
+/* ---- 체크리스트·표 선택 ---- */
+.checklist{display:flex;flex-direction:column;gap:4px}
+.chk-row{display:flex;align-items:center;gap:8px}
+.chk-row .chk-done{text-decoration:line-through;color:var(--muted)}
+.iconbtn.sm{width:24px;height:24px;font-size:16px}
+tr.sel td{background:var(--accent-soft)}

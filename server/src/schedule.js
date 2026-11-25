@@ -116,6 +116,6 @@ export function stateOf(t, today) {
   if (t.status === '보류') return '보류';
   if (t.undated) return t.status === '진행중' ? '진행중' : '예정';
   if (t.end < today) return '지연';
-  if (t.start <= today) return '진행중';
+  if (t.start <= today || t.status === '진행중') return '진행중';
   return '예정';
 }

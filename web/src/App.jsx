@@ -1,10 +1,11 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { PALETTE } from './util.js';
+import { PALETTE, CATEGORIES } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
-import Home from './pages/Home.jsx';
+import Home, { CategoryPage } from './pages/Home.jsx';
+import MyTasks from './pages/MyTasks.jsx';
 import Project from './pages/Project.jsx';
 import Admin from './pages/Admin.jsx';
 import Modal from './components/Modal.jsx';
@@ -59,6 +60,7 @@ export default function App() {
           </div>
           <nav className="side-nav">
             <NavLink to="/" end className="snav"><span className="ico">🏠</span>{tr('홈')}</NavLink>
+            <NavLink to="/my" className="snav"><span className="ico">✅</span>{tr('내 할 일')}</NavLink>
             {user.role === 'admin' && <NavLink to="/admin" className="snav"><span className="ico">⚙️</span>{tr('관리')}</NavLink>}
           </nav>
           <SideProjects />
@@ -78,6 +80,8 @@ export default function App() {
           </header>
           <Routes key={lang}>
             <Route path="/" element={<Home />} />
+            <Route path="/my" element={<MyTasks />} />
+            <Route path="/c/:cat" element={<CategoryPage />} />
             <Route path="/projects/:id/*" element={<Project />} />
             <Route path="/admin" element={user.role === 'admin' ? <Admin /> : <Navigate to="/" />} />
             <Route path="*" element={<Navigate to="/" />} />
@@ -98,7 +102,6 @@ export function rememberProject(id) {
     window.dispatchEvent(new Event('recent-projects'));
   } catch {}
 }
-const projColor = p => PALETTE[p.id % PALETTE.length];
 
 // 왼쪽 메뉴의 프로젝트 목록: 최근 본 프로젝트, 내 프로젝트, 그 밖의 프로젝트
 function SideProjects() {
@@ -122,12 +125,19 @@ function SideProjects() {
   const flip = k => setOpen(o => { const n = { ...o, [k]: o[k] === false }; try { localStorage.setItem('side-sec', JSON.stringify(n)); } catch {} return n; });
   return (
     <div className="side-secs">
+      <div className="side-sec">
+        <div className="side-sec-h" style={{ cursor: 'default' }}>{tr('카테고리')}</div>
+        {CATEGORIES.map(c => {
+          const n = live.filter(p => (p.category || 'construction') === c.key).length;
+          return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj"><span className="ico" style={{ width: 20, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
+        })}
+      </div>
       {secs.filter(([, , l]) => l.length).map(([k, name, list]) => (
         <div key={k} className="side-sec">
           <div className="side-sec-h" onClick={() => flip(k)}>{name}<span className="small">{open[k] === false ? '▸' : '▾'}</span></div>
           {open[k] !== false && list.map(p => (
-            <NavLink key={p.id} to={`/projects/${p.id}`} className="sproj" title={p.name}>
-              <span className="sq" style={{ background: projColor(p) }} /><span className="t">{p.name}</span>
+            <NavLink key={p.id} to={`/projects/${p.id}`} className="sproj" title={`${tr(CATEGORIES.find(c => c.key === (p.category || 'construction')).name)} · ${p.name}`}>
+              <span className="sq" style={{ background: CATEGORIES.find(c => c.key === (p.category || 'construction')).color }} /><span className="t">{p.name}</span>
               {p.stats?.late > 0 && <span className="cnt" title={tr('기한 초과 작업')}>{p.stats.late}</span>}
             </NavLink>
           ))}

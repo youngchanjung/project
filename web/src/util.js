@@ -18,7 +18,7 @@ export function stateOf(t, td) {
   if (t.status === '보류') return '보류';
   if (t.undated) return t.status === '진행중' ? '진행중' : '예정';
   if (t.end < td) return '지연';
-  if (t.start <= td) return '진행중';
+  if (t.start <= td || t.status === '진행중') return '진행중';
   return '예정';
 }
 export const issueOpen = i => i.status !== '해결완료' && !i.resolved;
@@ -78,4 +78,35 @@ export function downloadCSV(name, cols, rows) {
   const a = document.createElement('a');
   a.href = URL.createObjectURL(new Blob([txt], { type: 'text/csv' }));
   a.download = `${name}_${today()}.csv`; a.click();
+}
+
+// ---- 카테고리 (11/24 개정 계획) ----
+// view: 프로젝트를 열면 먼저 보이는 화면, tabs: 탭 순서
+export const CATEGORIES = [
+  { key: 'research', name: '연구', icon: '🔬', color: '#8e5bd8', desc: '회의·시험·보고 일정 중심 (Teams·Outlook 연동 예정)',
+    view: 'calendar', tabs: ['calendar', 'tasks', 'meetings', 'board', 'gantt', 'issues', 'dashboard', 'settings'] },
+  { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·선행관계·기준 일정',
+    view: 'gantt', tabs: ['gantt', 'dashboard', 'calendar', 'tasks', 'issues', 'board', 'meetings', 'settings'] },
+  { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
+    view: 'board', tabs: ['board', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
+];
+export const catOf = key => CATEGORIES.find(c => c.key === key) || CATEGORIES[1];
+// 새 프로젝트 기본 단계 (카테고리별 예시)
+export const CATEGORY_PHASES = { research: '1차년도, 2차년도', construction: '준비, 시공, 검사, 준공', design: '' };
+export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
+export const PRIORITY_COLOR = { 낮음: 'var(--plan)', 보통: 'var(--muted)', 높음: 'var(--soon)', 긴급: 'var(--late)' };
+export const splitTags = s => String(s || '').split(',').map(x => x.trim()).filter(Boolean);
+// 칸반에서 카드가 보이는 열: 지정된 열이 있으면 그 열, 없으면 상태가 같은 첫 열
+export function columnOf(t, columns) {
+  if (t.board_column_id && columns.some(c => c.id === t.board_column_id)) return t.board_column_id;
+  return (columns.find(c => c.status === t.status) || columns[0])?.id;
+}
+// 마감 표시: 날짜 없는 할 일은 빈 값
+export const dueOf = t => (t.undated ? '' : t.end);
+// D-day 문구: 시작 전 기간 작업은 "시작 D-n", 그 밖에는 "마감 D-n" (상태 st 또는 state)
+export function ddayLabel(t, td) {
+  const st = t.st || t.state;
+  if (st === '완료' || t.undated) return '';
+  const startPhase = st === '예정' && t.start !== t.end;
+  return `${tr(startPhase ? '시작' : '마감')} ${ddayTxt(diff(td, startPhase ? t.start : t.end))}`;
 }

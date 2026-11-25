@@ -3,7 +3,8 @@ import { NavLink, Routes, Route, Navigate, useParams, useSearchParams } from 're
 import { api } from '../api.js';
 import { useApp, rememberProject } from '../App.jsx';
 import Dropdown from '../components/Dropdown.jsx';
-import { today, stateOf, phaseColor, ROLE_NAME, PALETTE } from '../util.js';
+import { today, stateOf, phaseColor, ROLE_NAME, PALETTE, catOf } from '../util.js';
+import Board from '../views/Board.jsx';
 import Dashboard from '../views/Dashboard.jsx';
 import Gantt from '../views/Gantt.jsx';
 import Calendar from '../views/Calendar.jsx';
@@ -63,33 +64,41 @@ export default function Project() {
     afterSave: r => { if (r?.shifted?.length) toast(tr('선행관계에 따라 작업 {n}건의 날짜가 자동으로 조정되었습니다.', { n: r.shifted.length })); return reload(); }
   };
   const p = data.project;
-  const tabs = [['', tr('대시보드')], ['gantt', tr('간트')], ['calendar', tr('달력')], ['tasks', tr('작업 목록')], ['issues', `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`], ['meetings', tr('회의록')], ['settings', tr('설정')]];
+  const cat = catOf(p.category);
+  const isCons = cat.key === 'construction';
+  const NAMES = {
+    dashboard: tr('대시보드'), gantt: tr('간트'), calendar: tr(cat.key === 'research' ? '일정' : '달력'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
+  };
+  const tabs = cat.tabs.map(k => [k, NAMES[k]]);
 
   return (
     <Ctx.Provider value={ctx}>
       <main className="page">
         <div className="phead">
-          <span className="picon" style={{ background: PALETTE[p.id % PALETTE.length] }}>{(p.name || '?').slice(0, 1)}</span>
+          <span className="picon" style={{ background: cat.color }}>{(p.name || '?').slice(0, 1)}</span>
           <div className="ptitle">
-            <h1 className="title">{p.name}{p.archived && <span className="badge b-보류" style={{ marginLeft: 8, verticalAlign: 3 }}>{tr('보관됨')}</span>}</h1>
+            <h1 className="title"><span className="catbadge" style={{ '--c': cat.color }} title={tr(cat.desc)}>{cat.icon} {tr(cat.name)}</span>{p.name}{p.archived && <span className="badge b-보류" style={{ marginLeft: 8, verticalAlign: 3 }}>{tr('보관됨')}</span>}</h1>
             <span className="small">{[p.code, p.client, `${tr('내 역할')}: ${tr(ROLE_NAME[role])}`, tr(p.day_basis === 'calendar' ? '달력일 기준' : '근무일 기준')].filter(Boolean).join(' · ')}</span>
           </div>
           <div className="sp" />
           {can() && <button className="btn" onClick={() => ctx.openIssue(null)}>{tr('+ 이슈')}</button>}
-          {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr('+ 작업')}</button>}
+          {can() && <button className="btn primary" onClick={() => ctx.openTask(null)}>{tr(isCons ? '+ 작업' : '+ 할 일')}</button>}
         </div>
         <nav className="tabs">
-          {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}${k ? '/' + k : ''}`} end={k !== 'meetings'} className="tab">{n}</NavLink>)}
+          {tabs.map(([k, n]) => <NavLink key={k} to={`/projects/${id}/${k}`} end={k !== 'meetings'} className="tab">{n}</NavLink>)}
         </nav>
         <Routes>
-          <Route index element={<><FilterBar /><Dashboard /></>} />
+          <Route index element={<Navigate to={`/projects/${id}/${cat.view}${location.search}`} replace />} />
+          <Route path="dashboard" element={<><FilterBar /><Dashboard /></>} />
+          <Route path="board" element={<Board />} />
           <Route path="gantt" element={<Gantt />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />
           <Route path="meetings/*" element={<Meetings />} />
           <Route path="settings" element={<Settings />} />
-          <Route path="*" element={<Navigate to={`/projects/${id}`} />} />
+          <Route path="*" element={<Navigate to={`/projects/${id}/${cat.view}`} />} />
         </Routes>
       </main>
       {modal?.kind === 'task' && <TaskModal id={modal.id} preset={modal.preset} onClose={() => setModal(null)} />}

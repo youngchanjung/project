@@ -22,7 +22,8 @@ function loadOpt() {
 }
 
 export default function Gantt() {
-  const { filtered: raw, phases, holidays, td, color, openTask, tasks, deps, project, toast, can, reload } = useProject();
+  const { filtered: all, phases, holidays, td, color, openTask, tasks, deps, project, toast, can, reload } = useProject();
+  const raw = all.filter(t => !t.undated); // 날짜 없는 할 일은 칸반·할 일 목록에서만
   const [opt, setOptS] = useState(loadOpt);
   const setOpt = patch => setOptS(o => { const n = { ...o, ...patch }; try { localStorage.setItem('gantt-opt', JSON.stringify(n)); } catch {} return n; });
   const showDeps = opt.deps, showBase = opt.base;

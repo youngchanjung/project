@@ -8,7 +8,8 @@ import { tr, locale } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 
 export default function Calendar() {
-  const { filtered: ts, holidays, td, color, openTask, can, phases, tasks, deps, project, toast } = useProject();
+  const { filtered: all, holidays, td, color, openTask, can, phases, tasks, deps, project, toast } = useProject();
+  const ts = all.filter(t => !t.undated); // 날짜 없는 할 일은 칸반·할 일 목록에서만
   const [m, setM] = useState(td.slice(0, 7));
   const [sel, setSel] = useState(td);
   const [subscribing, setSubscribing] = useState(false);
