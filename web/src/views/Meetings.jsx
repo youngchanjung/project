@@ -198,7 +198,7 @@ function MeetingView() {
     <>
       <div className="toolbar">
         <Link to=".." className="btn sm">← {tr('목록')}</Link>
-        <h2 style={{ margin: 0, fontSize: 14.5 }}>{m.title}</h2>
+        <h2 style={{ margin: 0, fontSize: 17.5 }}>{m.title}</h2>
         <Badge s={m.status} />
         <span className="small">{[fmtDT(m.held_at), m.duration_ms ? fmtDur(m.duration_ms) : '', m.created_by_name].filter(Boolean).join(' · ')}</span>
         <div className="sp" />
