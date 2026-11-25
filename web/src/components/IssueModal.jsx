@@ -4,6 +4,7 @@ import History from './History.jsx';
 import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
 import { ISSUE_STATUS, PRIORITY, diff, today } from '../util.js';
+import Attachments from './Attachments.jsx';
 import { tr, locale } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
 import DateInput from './DateInput.jsx';
@@ -44,7 +45,7 @@ export default function IssueModal({ id, preset, onClose }) {
   const relTask = tasks.find(t => t.id === Number(f.task_id));
   return (
     <Modal title={i ? `${i.code} · ${i.title}` : tr('새 이슈')} onClose={onClose} wide>
-      {i && <div className="toolbar">{[['info', tr('정보')], ['cm', `${tr('댓글')} (${comments.length})`], ['hist', tr('변경 이력')]].map(([k, n]) =>
+      {i && <div className="toolbar">{[['info', tr('정보')], ['cm', `${tr('댓글')} (${comments.length})`], ['att', tr('사진 · 첨부')], ['hist', tr('변경 이력')]].map(([k, n]) =>
         <span key={k} className={`chip ${tab === k ? 'on' : ''}`} onClick={() => setTab(k)}>{n}</span>)}
         {i.raised && <span className="small">{tr('경과')} {diff(i.raised, i.resolved || today())}{tr('일')}</span>}</div>}
       {err && <div className="err">{err}</div>}
@@ -77,6 +78,7 @@ export default function IssueModal({ id, preset, onClose }) {
         <textarea value={cm} onChange={e => setCm(e.target.value)} placeholder={tr('진행 상황, 협의 결과 등을 남겨 주세요')} style={{ marginTop: 10 }} />
         <div className="actions" style={{ marginTop: 6 }}><button className="btn primary" onClick={addComment}>{tr('댓글 등록')}</button></div>
       </div>}
+      {tab === 'att' && i && <Attachments project={project} issueId={i.id} editable={editable} toast={toast} />}
       {tab === 'hist' && i && <History entity="issue" entityId={i.id} />}
       <div className="actions">
         {i && editable && <button className="btn danger" onClick={remove} style={{ marginRight: 'auto' }}>{tr('삭제')}</button>}

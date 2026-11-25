@@ -77,6 +77,7 @@ issuesRouter.delete('/:iid', ah(async (req, res) => {
   const i = await db('issues').where({ id: iid, project_id: pid }).first();
   if (!i) throw new HttpError(404, '이슈가 없습니다.');
   await db('issue_comments').where({ issue_id: iid }).del();
+  await db('attachments').where({ issue_id: iid }).update({ issue_id: null }); // 현장 사진은 남김
   await db('issues').where({ id: iid }).del();
   await audit(null, { user: req.user, projectId: pid, entity: 'issue', entityId: iid, action: 'delete', label: `${i.code} ${i.title}` });
   res.json({ ok: true });

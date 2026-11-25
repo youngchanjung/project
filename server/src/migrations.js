@@ -411,6 +411,30 @@ const migrations = [
         t.boolean('external').notNullable().defaultTo(false); // 외부 협력자: 참여 프로젝트의 자기 카드만 봄
       });
     }
+    },
+  {
+    // 시공 4단계(11/25): 공정률 가중치, 현장 사진·첨부
+    name: '015_construction_photos',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.float('weight'); // 공정률 가중치 (공사비 등). 비우면 기간으로 계산
+      });
+      await k.schema.createTable('attachments', t => {
+        t.increments('id');
+        t.integer('project_id').notNullable().references('projects.id').onDelete('CASCADE');
+        t.integer('task_id').references('tasks.id').onDelete('SET NULL');
+        t.integer('issue_id').references('issues.id').onDelete('SET NULL');
+        t.string('file', 200).notNullable(); // 저장 이름 (attachments/<프로젝트>/<id>.<확장자>)
+        t.string('name', 300).notNullable(); // 올린 파일 이름
+        t.string('mime', 120);
+        t.integer('size');
+        t.string('note', 300);
+        t.string('taken_on', 10); // 촬영·작성일 (기본: 올린 날)
+        t.integer('created_by');
+        t.string('created_at', 32);
+        t.index(['project_id']); t.index(['task_id']); t.index(['issue_id']);
+      });
+    }
   }
 ];
 

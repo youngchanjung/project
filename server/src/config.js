@@ -44,6 +44,8 @@ export const config = {
   anthropicKey: process.env.ANTHROPIC_API_KEY || '',
   minutesModel: process.env.MINUTES_AI_MODEL || 'claude-opus-5-5',
   meetingsDir: path.resolve(ROOT, process.env.MEETINGS_DIR || path.join(dataDir, 'meetings')),
+  attachDir: path.resolve(ROOT, process.env.ATTACH_DIR || path.join(dataDir, 'attachments')),
+  maxAttachMB: Math.max(1, Number(process.env.ATTACH_MAX_MB || 50)),
   maxAudioMB: Math.max(10, Number(process.env.MEETING_MAX_MB || 1024)),
   // HTTPS (브라우저 녹음은 https 또는 localhost 에서만 동작). pfx 파일 또는 cert/key 파일
   httpsPfx: process.env.HTTPS_PFX ? path.resolve(ROOT, process.env.HTTPS_PFX) : null,

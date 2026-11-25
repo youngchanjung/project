@@ -6,6 +6,7 @@ import { useProject } from '../pages/Project.jsx';
 import { statusLabel, TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, fmtW, fmtH, today, diff, ddayLabel, catOf, columnOf, attendeeIds } from '../util.js';
 import { useApp } from '../App.jsx';
 import { tr } from '../i18n.js';
+import Attachments from './Attachments.jsx';
 import { Tx, TxHint } from '../contentTr.jsx';
 import DateInput from './DateInput.jsx';
 
@@ -18,9 +19,9 @@ export default function TaskModal({ id, preset, onClose }) {
   const isCons = catOf(project.category).key === 'construction';
   const { user } = useApp();
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', ...preset };
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', weight: '', ...preset };
   const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
-    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '' });
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '', weight: x.weight ?? '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
   // 하위 작업(WBS): 자기 자신과 자기 하위 작업은 상위로 고를 수 없음
   const kids = t ? tasks.filter(x => x.parent_id === t.id) : [];
@@ -53,7 +54,7 @@ export default function TaskModal({ id, preset, onClose }) {
     setErr(null); setBusy(true);
     const body = { ...f };
     for (const k of ['id', 'project_id', 'updated_at', 'updated_by', 'st', 'undated', 'created_at', 'board_order']) delete body[k];
-    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'deadline', 'actual_start', 'est_hours']) if (body[k] === '') body[k] = null;
+    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'deadline', 'actual_start', 'est_hours', 'weight']) if (body[k] === '') body[k] = null;
     for (const k of ['float', 'crit']) delete body[k];
     if (body.type === '마일스톤' || body.type === '제출' || body.type === '지급') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
     if (body.type === '회의') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
@@ -137,6 +138,8 @@ export default function TaskModal({ id, preset, onClose }) {
           <Checklist t={t} items={t ? checklist.filter(c => c.task_id === t.id) : newChecks.map((text, i) => ({ id: -i - 1, text, done: false }))}
             editable={editable} project={project} reload={reload} setErr={setErr}
             onLocal={t ? null : setNewChecks} local={newChecks} />
+          <label>{tr(isCons ? '현장 사진 · 첨부' : '첨부')}</label>
+          <div>{t ? <Attachments project={project} taskId={t.id} editable={editable} toast={toast} /> : <span className="small">{tr('저장한 뒤 사진·파일을 붙일 수 있습니다.')}</span>}</div>
           <div className="full"><button type="button" className="linkbtn" onClick={toggleDet}>{det ? '▾' : '▸'} {tr(det ? '자세히 접기' : '자세히 (시작일·단계·유형·선행관계·기준 일정 등)')}</button></div>
           {det && <>
             <label>{tr('시작일')}</label>
@@ -158,6 +161,9 @@ export default function TaskModal({ id, preset, onClose }) {
             <label>{tr('진행률')}</label>
             <div className="row"><input type="number" min="0" max="100" step="10" value={f.progress} onChange={set('progress')} style={{ width: 80 }} />%
               {f.status === '완료' && <>{tr('실제 완료일')} <DateInput value={f.actual_end || ''} onChange={set('actual_end')} /></>}</div>
+            {isCons && <><label>{tr('공정 가중치')}</label>
+              <div className="row"><input type="number" min="0" step="any" value={f.weight ?? ''} onChange={set('weight')} style={{ width: 140 }} placeholder={tr('예: 공사비')} />
+                <span className="small">{tr('선택 입력. 공사비 등을 넣으면 ‘공정률’ 화면에서 가중치 기준으로 계산합니다.')}</span></div></>}
             {isCons && <>
               <label>{tr('상위 작업 (WBS)')}</label>
               <div className="row"><select value={f.parent_id} onChange={set('parent_id')} style={{ flex: 1 }}><option value="">{tr('(없음 · 맨 위 작업)')}</option>

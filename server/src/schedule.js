@@ -196,6 +196,57 @@ export function rollup(tasks) {
   return changed;
 }
 
+/**
+ * 공정률·S-커브. 요약 작업(하위가 있는 작업)·날짜 없는 작업은 빼고 실제 작업만 씀.
+ * - 가중치: mode 'weight' 이면 작업의 weight(공사비 등), 아니면 기간(일)
+ * - 계획: plan(Map id→{start,end}, 기준선) 이 있으면 그 날짜, 없으면 기준 시작·종료, 그것도 없으면 현재 일정.
+ *   기간 안에서는 날짜에 비례해 0→100%
+ * - 실적: 실제 시작일(없으면 시작일)부터 실제 완료일(없으면 오늘)까지 현재 진행률까지 고르게 올라간 것으로 봄
+ * @returns {{mode, total, points:[{date,plan,actual}], today:{date,plan,actual}, start, end, count}}
+ */
+export function sCurve(tasks, { today, plan = null, mode = 'duration', step = 7 } = {}) {
+  const parents = new Set(tasks.map(t => t.parent_id).filter(Boolean));
+  const rows = [];
+  for (const t of tasks) {
+    if (t.undated || parents.has(t.id) || !t.start || !t.end) continue;
+    const b = plan?.get(t.id);
+    const ps = b?.start || t.baseline_start || t.start, pe = b?.end || t.baseline_end || t.end;
+    const w = mode === 'weight' ? Math.max(0, Number(t.weight) || 0) : diffDays(t.start, t.end) + 1;
+    if (!(w > 0)) continue;
+    const done = t.status === '완료' || !!t.actual_end;
+    const p = done ? 1 : Math.min(1, Math.max(0, (Number(t.progress) || 0) / 100));
+    const as = t.actual_start || (p > 0 ? t.start : null);
+    const ae = t.actual_end || (done ? t.end : today);
+    rows.push({ w, ps, pe: pe < ps ? ps : pe, p, as: as && as <= today ? as : (p > 0 ? today : null), ae: ae > today ? today : ae });
+  }
+  const total = rows.reduce((a, r) => a + r.w, 0);
+  if (!rows.length) return { mode, total: 0, points: [], today: { date: today, plan: 0, actual: 0 }, start: null, end: null, count: 0 };
+  const frac = (d, s, e) => (d < s ? 0 : d >= e ? 1 : (diffDays(s, d) + 1) / (diffDays(s, e) + 1));
+  const planAt = d => rows.reduce((a, r) => a + r.w * frac(d, r.ps, r.pe), 0) / total * 100;
+  const actAt = d => rows.reduce((a, r) => {
+    if (!r.as || !r.p) return a;
+    const e = r.ae < r.as ? r.as : r.ae;
+    return a + r.w * r.p * frac(d, r.as, e);
+  }, 0) / total * 100;
+  let start = rows[0].ps, end = rows[0].pe;
+  for (const r of rows) { if (r.ps < start) start = r.ps; if (r.as && r.as < start) start = r.as; if (r.pe > end) end = r.pe; }
+  if (today > end) end = today;
+  const r1 = v => Math.round(v * 10) / 10;
+  const points = [];
+  for (let d = addDays(start, -1); ; d = addDays(d, step)) {
+    const last = d >= end;
+    const x = last ? end : d;
+    points.push({ date: x, plan: r1(planAt(x)), actual: x <= today ? r1(actAt(x)) : null });
+    if (last) break;
+  }
+  // 오늘 점을 끼워 넣음
+  if (today >= start && today <= end && !points.some(p => p.date === today)) {
+    points.push({ date: today, plan: r1(planAt(today)), actual: r1(actAt(today)) });
+    points.sort((a, b) => a.date.localeCompare(b.date));
+  }
+  return { mode, total, points, today: { date: today, plan: r1(planAt(today)), actual: r1(actAt(today)) }, start, end, count: rows.length };
+}
+
 // 오늘 기준 작업 상태(화면 표시용)
 export function stateOf(t, today) {
   if (t.status === '완료' || t.actual_end) return '완료';

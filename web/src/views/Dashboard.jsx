@@ -1,3 +1,5 @@
+import { useEffect, useState } from 'react';
+import { api } from '../api.js';
 import { useProject } from '../pages/Project.jsx';
 import { addD, diff, fmt, fmtY, dow, ddayTxt, issueOpen, issueLate, downloadXLSX, taskCols, issueCols } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
@@ -34,6 +36,8 @@ export default function Dashboard() {
   // 시공: 크리티컬 패스·기준선 대비 지연
   const crit = ts.filter(t => t.crit).sort((a, b) => a.start.localeCompare(b.start));
   const dlOver = ts.filter(t => t.deadline && t.end > t.deadline && t.st !== '완료');
+  const [sc, setSc] = useState(null); // 공정률 (계획·실적)
+  useEffect(() => { if (isCons) api.get(`/projects/${project.id}/scurve?today=${td}`).then(r => setSc(r.today && r.count ? r.today : null)).catch(() => setSc(null)); }, [isCons, project.id, td, tasks]);
   const slipped = ts.map(t => { const b = bl(t); return b ? { t, n: diff(b.end, t.end) } : null; }).filter(x => x && x.n > 0).sort((a, b) => b.n - a.n);
 
   return (
@@ -53,6 +57,7 @@ export default function Dashboard() {
         <div className="kpi prog">{tr('진행 중')}<b>{prog.length}</b></div>
         <div className="kpi soon">{tr('7일 내 시작·마감')}<b>{week.length}</b></div>
         <div className="kpi late">{tr('지연 이슈')}<b>{il.length}</b><span className="small">{tr('미해결')} {io.length}{tr('건 중')}</span></div>
+        {isCons && sc && <div className={`kpi ${sc.actual < sc.plan - 0.05 ? 'late' : 'done'}`}>{tr('공정률 (실적 / 계획)')}<b>{Math.round(sc.actual)}% <span className="small">/ {Math.round(sc.plan)}%</span></b><span className="small" style={sc.actual < sc.plan - 0.05 ? { color: 'var(--late)' } : undefined}>{sc.actual < sc.plan - 0.05 ? '▼ ' : '▲ '}{Math.round((sc.actual - sc.plan) * 10) / 10}%p</span></div>}
         {isCons && <div className="kpi late">{tr('크리티컬 작업')}<b style={{ color: 'var(--crit)' }}>{crit.length}</b><span className="small">{tr('여유 0일')}</span></div>}
         {isCons && <div className="kpi late">{tr('기준선보다 늦음')}<b>{slipped.length}</b>{slipped[0] && <span className="small">{tr('최대 +{n}일', { n: slipped[0].n })}</span>}</div>}
         {isCons && dlOver.length > 0 && <div className="kpi late">{tr('마감 기한 초과')}<b>{dlOver.length}</b><span className="small">{dlOver.slice(0, 2).map(t => t.code || t.name).join(', ')}</span></div>}
