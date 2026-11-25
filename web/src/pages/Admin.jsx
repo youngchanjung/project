@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
-import { fmtY, dow, downloadXLSX } from '../util.js';
+import { fmtY, dow, downloadXLSX, CATEGORIES } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { COUNTRIES } from '../countries.js';
 import { tr } from '../i18n.js';
@@ -181,13 +181,14 @@ function Departments({ depts, reload }) {
   return (
     <div className="card"><h3>{tr('부서')} <span className="small">{depts.filter(d => d.active).length}{tr('개')}</span><span className="row" style={{ display: 'flex', gap: 6 }}><ExportButton toast={toast} make={() => downloadXLSX('부서', [{ name: '부서', rows: sorted, cols: [[d => dn.get(d.id), '부서'], ['code', '코드'], ['members', '인원'], [d => tr(d.active ? '사용 중' : '사용 안 함'), '상태']] }])} /><button className="btn primary sm" onClick={() => setEdit({})}>{tr('+ 부서 추가')}</button></span></h3>
       <div className="tablewrap" style={{ maxHeight: 420 }}>
-        <table><thead><tr><th>{tr('부서')}</th><th>{tr('코드')}</th><th>{tr('인원')}</th><th /></tr></thead>
+        <table><thead><tr><th>{tr('부서')}</th><th>{tr('코드')}</th><th>{tr('인원')}</th><th>{tr('볼 수 있는 카테고리')}</th><th /></tr></thead>
           <tbody>{sorted.map(d => (
             <tr key={d.id} style={d.active ? undefined : { opacity: .5 }}>
               <td>{dn.get(d.id)}{!d.active && ` (${tr('사용 안 함')})`}</td><td className="small">{d.code}</td><td>{d.members}{tr('명')}</td>
+              <td className="small">{d.categories ? CATEGORIES.filter(c => d.categories.split(',').includes(c.key)).map(c => `${c.icon} ${tr(c.name)}`).join(' · ') : tr(d.parent_id ? '상위 부서와 같음' : '전체')}</td>
               <td className="nw"><button className="btn sm" onClick={() => setEdit(d)}>{tr('수정')}</button></td>
             </tr>))}
-            {!depts.length && <tr><td colSpan={4} className="empty">{tr('부서를 추가하세요. 엑셀로 직원을 등록하면 부서가 자동으로 만들어집니다.')}</td></tr>}
+            {!depts.length && <tr><td colSpan={5} className="empty">{tr('부서를 추가하세요. 엑셀로 직원을 등록하면 부서가 자동으로 만들어집니다.')}</td></tr>}
           </tbody></table>
       </div>
       {edit && <DeptModal d={edit} depts={depts} dn={dn} onClose={() => setEdit(null)} onSaved={msg => { reload(); toast(msg); setEdit(null); }} />}
@@ -197,7 +198,7 @@ function Departments({ depts, reload }) {
 
 function DeptModal({ d, depts, dn, onClose, onSaved }) {
   const isNew = !d.id;
-  const [f, setF] = useState({ name: d.name || '', code: d.code || '', parent_id: d.parent_id ?? '', sort: d.sort ?? 0, active: d.active ?? true });
+  const [f, setF] = useState({ name: d.name || '', code: d.code || '', parent_id: d.parent_id ?? '', sort: d.sort ?? 0, active: d.active ?? true, categories: d.categories ? d.categories.split(',') : [] });
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.type === 'checkbox' ? e.target.checked : e.target.value });
   const save = async () => {
@@ -222,6 +223,12 @@ function DeptModal({ d, depts, dn, onClose, onSaved }) {
         </select>
         <label>{tr('부서 코드')}</label><input type="text" value={f.code} onChange={set('code')} placeholder={tr('선택')} />
         <label>{tr('정렬 순서')}</label><input type="number" value={f.sort} onChange={set('sort')} />
+        <label>{tr('볼 수 있는 카테고리')}</label>
+        <div>
+          <div className="row">{CATEGORIES.map(c => (
+            <label key={c.key} className="small"><input type="checkbox" checked={f.categories.includes(c.key)} onChange={e => setF({ ...f, categories: e.target.checked ? [...f.categories, c.key] : f.categories.filter(x => x !== c.key) })} /> {c.icon} {tr(c.name)}</label>))}</div>
+          <div className="small">{tr('아무것도 고르지 않으면 상위 부서와 같고, 상위 부서도 없으면 전체를 봅니다. 참여 중인 프로젝트는 항상 보입니다.')}</div>
+        </div>
         {!isNew && <><label>{tr('사용')}</label><label className="small"><input type="checkbox" checked={f.active} onChange={set('active')} /> {tr('사용 중 (없어진 부서는 해제)')}</label></>}
       </div>
       <div className="actions">
@@ -252,6 +259,7 @@ function Backup() {
         {last
           ? <div className={last.ok ? 'ok' : 'err'}>{tr('최근 백업:')} {fmtDT(last.at)} ({last.by === '예약 작업' ? tr('예약 작업') : last.by}) · {last.ok ? `${tr('성공')}, ${kb(last.size)}` : `${tr('실패')} - ${last.error}`}</div>
           : <div className="err">{tr('아직 백업 기록이 없습니다. 서버 PC에서 register-backup-task.bat 을 관리자 권한으로 실행해 자동 백업을 등록하세요.')}</div>}
+        {last?.files && <p className="small">{tr('첨부·현장 사진')}: {tr('파일 {n}개', { n: last.files.attachments?.files || 0 })} ({kb(last.files.attachments?.bytes || 0)}) · {tr('회의 녹음')}: {tr('파일 {n}개', { n: last.files.meetings?.files || 0 })} ({kb(last.files.meetings?.bytes || 0)}) → {st.dir}{/[\\/]$/.test(st.dir) ? '' : '/'}files</p>}
         <p className="small">{tr('저장 위치:')} {st.dir}{st.copyDir && <><br />{tr('추가 복사:')} {st.copyDir}</>}<br />{tr('최근')} {st.keep}{tr('개 보관')}</p>
         <div className="tablewrap" style={{ maxHeight: 220 }}><table><tbody>{st.files.map(f => (
           <tr key={f.name}><td className="small">{f.name}</td><td className="small nw">{kb(f.size)}</td></tr>))}</tbody></table></div>

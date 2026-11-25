@@ -5,6 +5,7 @@ import XLSX from 'xlsx';
 import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId } from '../util.js';
 import { hashPassword, publicUser, requireLogin, requireAdmin } from '../auth.js';
+const CATEGORIES = ['research', 'construction', 'design'];
 
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 10 * 1024 * 1024, files: 1 } });
 const s = v => (v == null ? '' : String(v).trim());
@@ -191,6 +192,11 @@ async function deptBody(b, id) {
   if (b.code !== undefined) out.code = s(b.code) || null;
   if (b.sort !== undefined) out.sort = Number(b.sort) || 0;
   if (b.active !== undefined) out.active = !!b.active;
+  if (b.categories !== undefined) {
+    const list = (Array.isArray(b.categories) ? b.categories : String(b.categories || '').split(',')).map(x => String(x).trim()).filter(Boolean);
+    if (list.some(c => !CATEGORIES.includes(c))) throw new HttpError(400, '카테고리는 연구·시공·설계 중에서 고르세요.');
+    out.categories = list.length && list.length < CATEGORIES.length ? CATEGORIES.filter(c => list.includes(c)).join(',') : null;
+  }
   if (b.parent_id !== undefined) {
     out.parent_id = b.parent_id === null || b.parent_id === '' ? null : Number(b.parent_id);
     if (out.parent_id) {

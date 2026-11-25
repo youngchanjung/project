@@ -91,8 +91,9 @@ export default function Gantt() {
 
   useEffect(() => { if (wrap.current) wrap.current.scrollLeft = Math.max(0, x(td) - 200); }, [zoom]); // eslint-disable-line
 
-  const cols = COLS.filter(([k]) => opt.cols[k]);
-  const NAME_W = window.innerWidth < 1000 ? 230 : 360; // 좁은 화면에서는 작업명 칸을 줄임
+  const phone = window.innerWidth < 700; // 휴대폰: 작업명만 두고 막대를 넓게
+  const cols = phone ? [] : COLS.filter(([k]) => opt.cols[k]);
+  const NAME_W = phone ? 140 : window.innerWidth < 1000 ? 230 : 360; // 좁은 화면에서는 작업명 칸을 줄임
   const LW = NAME_W + cols.reduce((a, c) => a + c[2], 0);
   const setZ = z => { setZoom(z); localStorage.setItem('gantt-zoom', z); };
 

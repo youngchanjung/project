@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { ah, HttpError, now, insertId } from '../util.js';
-import { checkPassword, hashPassword, setSession, clearSession, publicUser, requireLogin } from '../auth.js';
+import { checkPassword, hashPassword, setSession, clearSession, publicUser, requireLogin, allowedCategories } from '../auth.js';
 
 export const authRouter = Router();
 
@@ -33,7 +33,11 @@ authRouter.post('/login', ah(async (req, res) => {
   res.json({ user: publicUser(u) });
 }));
 authRouter.post('/logout', (_req, res) => { clearSession(res); res.json({ ok: true }); });
-authRouter.get('/me', (req, res) => res.json({ user: publicUser(req.user) || null }));
+authRouter.get('/me', ah(async (req, res) => {
+  if (!req.user) return res.json({ user: null });
+  const cats = await allowedCategories(req.user);
+  res.json({ user: { ...publicUser(req.user), categories: cats ? [...cats] : null } });
+}));
 
 authRouter.post('/password', requireLogin, ah(async (req, res) => {
   const { current, next } = req.body || {};

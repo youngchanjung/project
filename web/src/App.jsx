@@ -1,7 +1,8 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
+import PageTip, { resetTips } from './components/PageTip.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { PALETTE, CATEGORIES, personColor } from './util.js';
+import { PALETTE, CATEGORIES, personColor, catAllowed } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
 import Home, { CategoryPage, ProjectsHome } from './pages/Home.jsx';
@@ -33,6 +34,7 @@ export const useApp = () => useContext(Ctx);
 export default function App() {
   const [user, setUser] = useState(undefined);
   const [toastMsg, setToastMsg] = useState(null);
+  const [tools, setTools] = useState(false);
   const [pwOpen, setPwOpen] = useState(false);
   // 왼쪽 메뉴 펼침 (좁은 화면에서는 처음에 접어 둠)
   const [side, setSide] = useState(() => { try { const v = localStorage.getItem('side-open'); if (v) return v === '1'; } catch {} return window.innerWidth > 1000; });
@@ -87,14 +89,20 @@ export default function App() {
             {!side && <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 펼치기')}>☰</button>}
             {!side && <NavLink to="/" className="brand">{tr('📅 R&D 일정관리')}</NavLink>}
             <div className="sp" />
-            <FontSelect />
-            <LangSelect lang={lang} onChange={changeLang} />
-            <ContentTrToggle />
             <Bell />
-            <span className="me"><span className="avatar" style={{ background: personColor(user.id) }}>{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
-            <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
-            <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
+            {/* 휴대폰 화면에서는 아래 도구를 ⋯ 메뉴 안으로 접음 */}
+            <button className="iconbtn tb-more" onClick={() => setTools(v => !v)} title={tr('메뉴')} aria-label={tr('메뉴')} aria-expanded={tools}>⋯</button>
+            <div className={`tb-tools ${tools ? 'open' : ''}`} onClick={e => { if (e.target.closest('button')) setTools(false); }}>
+              <button className="iconbtn" onClick={() => { resetTips(); toast(tr('화면 안내를 다시 보여 줍니다.')); }} title={tr('화면 안내 다시 보기')} aria-label={tr('화면 안내 다시 보기')}>❔</button>
+              <FontSelect />
+              <LangSelect lang={lang} onChange={changeLang} />
+              <ContentTrToggle />
+              <span className="me"><span className="avatar" style={{ background: personColor(user.id) }}>{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
+              <button className="btn sm" onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
+              <button className="btn sm" onClick={logout}>{tr('로그아웃')}</button>
+            </div>
           </header>
+          <PageTip />
           <Routes key={lang}>
             <Route path="/" element={<Home />} />
             <Route path="/my" element={<MyTasks />} />
@@ -123,6 +131,7 @@ export function rememberProject(id) {
 
 // 왼쪽 메뉴의 프로젝트 목록: 최근 본 프로젝트, 내 프로젝트, 그 밖의 프로젝트
 function SideProjects() {
+  const { user } = useApp();
   const [ps, setPs] = useState([]);
   const [recent, setRecent] = useState([]);
   const [open, setOpen] = useState(() => { try { return JSON.parse(localStorage.getItem('side-sec') || '{}'); } catch { return {}; } });
@@ -147,6 +156,7 @@ function SideProjects() {
         <div className="side-sec-h" style={{ cursor: 'default' }}>{tr('카테고리')}</div>
         {CATEGORIES.map(c => {
           const n = live.filter(p => (p.category || 'construction') === c.key).length;
+          if (!n && !catAllowed(user, c.key)) return null;
           return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj scat"><span className="ico" style={{ width: 22, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
         })}
       </div>

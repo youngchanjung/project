@@ -1,6 +1,6 @@
 import { setDateHolidays } from '../components/DateInput.jsx';
 import { createContext, useContext, useEffect, useMemo, useState, useCallback } from 'react';
-import { NavLink, Routes, Route, Navigate, useParams, useSearchParams } from 'react-router-dom';
+import { NavLink, Routes, Route, Navigate, useParams, useSearchParams, useLocation } from 'react-router-dom';
 import { api } from '../api.js';
 import { useApp, rememberProject } from '../App.jsx';
 import Dropdown from '../components/Dropdown.jsx';
@@ -41,6 +41,9 @@ export default function Project() {
   const [baseSel, setBaseSel] = useState(0);
   const [baseRows, setBaseRows] = useState(null);
   const td = today();
+  const loc = useLocation();
+  // 휴대폰에서 탭 줄이 옆으로 넘칠 때 지금 탭이 보이게
+  useEffect(() => { document.querySelector('.tabs .tab.active')?.scrollIntoView({ inline: 'center', block: 'nearest' }); }, [loc.pathname, data ? 1 : 0]);
 
   const reload = useCallback(() => api.get(`/projects/${id}/data`).then(setData).catch(e => setErr(e.message)), [id]);
   useEffect(() => { setData(null); setBaseSel(0); reload(); rememberProject(Number(id)); }, [reload]); // eslint-disable-line
@@ -146,9 +149,12 @@ export function FilterBar({ children, right }) {
   const groups = [...phases.filter(p => tasks.some(t => t.phase_id === p.id)).map(p => ({ id: p.id, name: p.name })), ...(tasks.some(t => !t.phase_id) ? [{ id: 0, name: tr('단계 없음') }] : [])];
   const set = (gid, on) => setFilter({ ...filter, off: on ? filter.off.filter(x => x !== gid) : [...filter.off, gid] });
   const shown = groups.filter(g => !filter.off.includes(g.id)).length;
+  // 휴대폰 화면: 검색창만 두고 나머지 도구는 '보기 설정'을 눌렀을 때 펼침
+  const [more, setMore] = useState(false);
   return (
-    <div className="toolbar">
+    <div className={`toolbar fbar ${more ? 'more' : ''}`}>
       <input type="search" className="tsearch" placeholder={tr('작업명·담당·ID 검색')} value={filter.q} onChange={e => setFilter({ ...filter, q: e.target.value })} />
+      <button type="button" className="btn fb-more" onClick={() => setMore(!more)} aria-expanded={more}>{more ? '▾' : '▸'} {tr('보기 설정')}</button>
       <Dropdown label={shown === groups.length ? tr('단계: 전체') : tr('단계: {n}개', { n: shown })} active={shown !== groups.length} title={tr('보여 줄 단계를 고릅니다.')}>
         <div className="dd-tools">
           <button className="btn sm" onClick={() => setFilter({ ...filter, off: [] })}>{tr('모두 보기')}</button>

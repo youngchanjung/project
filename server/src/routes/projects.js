@@ -1,9 +1,9 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate } from '../util.js';
-import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
+import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate, projectCalendar } from '../util.js';
+import { requireLogin, projectRole, canEdit, publicUser, visibleProjects, allowedCategories } from '../auth.js';
 import { normCalendars } from '../countries.js';
-import { stateOf, criticalPath, sCurve } from '../schedule.js';
+import { stateOf, criticalPath, sCurve, addWorkdays, nextWorkdayOnOrAfter, workdaysBetween } from '../schedule.js';
 import fs from 'node:fs';
 import path from 'node:path';
 import { config } from '../config.js';
@@ -62,7 +62,7 @@ projectsRouter.get('/', ah(async (req, res) => {
   const issues = await db('issues').select('project_id', 'status', 'resolved', 'target', 'priority');
   const mem = await db('project_members').where({ user_id: req.user.id });
   const pms = await db('project_members as m').join('users as u', 'u.id', 'm.user_id').where('m.role', 'pm').select('m.project_id', 'u.name');
-  const visible = req.user.external ? ps.filter(p => mem.some(m => m.project_id === p.id)) : ps;
+  const visible = await visibleProjects(req.user, ps);
   const out = visible.map(p => {
     const ts = tasks.filter(x => x.project_id === p.id);
     const st = ts.map(x => stateOf(x, t));
@@ -92,6 +92,8 @@ projectsRouter.post('/', ah(async (req, res) => {
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
   if (!body.category) body.category = 'construction';
   checkCategory(body.category);
+  const cats = await allowedCategories(req.user);
+  if (cats && !cats.has(body.category)) throw new HttpError(403, '이 카테고리의 프로젝트를 만들 수 없는 부서입니다.');
   cleanAgreement(body);
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
@@ -117,6 +119,7 @@ projectsRouter.post('/', ah(async (req, res) => {
 
 // ---- 프로젝트 템플릿: 단계·칸반 열·할 일(체크리스트 포함)을 저장해 새 프로젝트에 복사 ----
 // 날짜는 프로젝트마다 다르므로 저장하지 않음 (복사된 할 일은 '날짜 없음'으로 시작)
+// 단, 기간(days)이 있는 작업은 만든 날부터 선행 작업(after, 끝-시작)을 따라 날짜를 정하고 선행관계도 만듦 (시공 공정 템플릿)
 async function applyTemplate(trx, projectId, tpl, user) {
   const phaseIds = [];
   for (const [i, p] of (tpl.phases || []).entries()) {
@@ -131,31 +134,55 @@ async function applyTemplate(trx, projectId, tpl, user) {
   } else await insertDefaultColumns(trx, projectId);
   const first = await trx('board_columns').where({ project_id: projectId }).orderBy('sort').first();
   const d = now().slice(0, 10);
-  for (const [i, t] of (tpl.tasks || []).entries()) {
+  const hol = await projectCalendar(trx, await trx('projects').where({ id: projectId }).first());
+  const list = tpl.tasks || [];
+  const dates = [], ids = [];
+  for (const [i, t] of list.entries()) {
+    const days = Math.round(Number(t.days));
+    if (!(days >= 1 && days <= 3650)) { dates.push(null); continue; }
+    const preds = (Array.isArray(t.after) ? t.after : []).filter(j => Number.isInteger(j) && j >= 0 && j < i && dates[j]);
+    const start = preds.length ? preds.map(j => addWorkdays(dates[j].end, 1, hol)).sort().pop() : nextWorkdayOnOrAfter(d, hol);
+    dates.push({ start, end: days === 1 ? start : addWorkdays(start, days - 1, hol), preds });
+  }
+  for (const [i, t] of list.entries()) {
+    const dt = dates[i];
     const tid = await insertId(trx, 'tasks', {
       project_id: projectId, name: String(t.name || '').slice(0, 300) || '-', type: TASK_TYPES.includes(t.type) ? t.type : '작업',
       phase_id: Number.isInteger(t.phase) ? phaseIds[t.phase] ?? null : null, priority: TASK_PRIORITY.includes(t.priority) ? t.priority : '보통',
       tags: t.tags || null, note: t.note || null, est_hours: Number(t.est_hours) > 0 ? Number(t.est_hours) : null, is_key: !!t.is_key,
-      start: d, end: d, undated: true, status: '미착수', board_column_id: first?.status === '미착수' ? first.id : null, board_order: i + 1,
+      trade: t.trade ? String(t.trade).slice(0, 80) : null,
+      start: dt ? dt.start : d, end: dt ? dt.end : d, undated: !dt, status: '미착수', board_column_id: first?.status === '미착수' ? first.id : null, board_order: i + 1,
       sort: i + 1, created_at: now(), updated_at: now(), updated_by: user.id
     });
     for (const [j, text] of (t.checklist || []).entries()) if (text) await trx('task_checklist').insert({ task_id: tid, text: String(text).slice(0, 300), sort: j });
+    ids.push(tid);
+    for (const j of dt?.preds || []) await trx('dependencies').insert({ project_id: projectId, pred_id: ids[j], succ_id: tid, kind: 'FS', lag: 0 });
   }
 }
 async function templateOf(projectId) {
-  const [phases, columns, tasks, checks] = await Promise.all([
+  const p = await db('projects').where({ id: projectId }).first();
+  const hol = await projectCalendar(db, p);
+  const [phases, columns, tasks, checks, deps] = await Promise.all([
     db('phases').where({ project_id: projectId }).orderBy('sort'),
     db('board_columns').where({ project_id: projectId }).orderBy('sort'),
     db('tasks').where({ project_id: projectId }).orderBy([{ column: 'sort' }, { column: 'id' }]),
-    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: projectId })).orderBy([{ column: 'task_id' }, { column: 'sort' }])
+    db('task_checklist').whereIn('task_id', db('tasks').select('id').where({ project_id: projectId })).orderBy([{ column: 'task_id' }, { column: 'sort' }]),
+    db('dependencies').where({ project_id: projectId, kind: 'FS' })
   ]);
   const pidx = new Map(phases.map((p, i) => [p.id, i]));
+  const kept = tasks.filter(t => t.type !== '회의');
+  const tidx = new Map(kept.map((t, i) => [t.id, i]));
+  // 시공 프로젝트는 기간·선행관계(끝-시작)도 저장해 새 프로젝트에서 날짜를 다시 계산
+  const sched = p.category === 'construction';
   return {
     phases: phases.map(p => ({ name: p.name, color: p.color })),
     columns: columns.map(c => ({ name: c.name, color: c.color, status: c.status, is_review: !!c.is_review })),
-    tasks: tasks.filter(t => t.type !== '회의').map(t => ({
+    tasks: kept.map((t, i) => ({
       name: t.name, type: t.type, phase: pidx.has(t.phase_id) ? pidx.get(t.phase_id) : null, priority: t.priority, tags: t.tags || undefined,
       note: t.note || undefined, est_hours: t.est_hours || undefined, is_key: !!t.is_key || undefined,
+      trade: t.trade || undefined,
+      ...(sched && !t.undated ? { days: t.start === t.end ? 1 : Math.max(1, workdaysBetween(t.start, t.end, hol)),
+        after: deps.filter(d => d.succ_id === t.id && tidx.get(d.pred_id) < i).map(d => tidx.get(d.pred_id)) } : {}),
       checklist: checks.filter(c => c.task_id === t.id).map(c => c.text)
     }))
   };
