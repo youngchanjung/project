@@ -247,28 +247,30 @@ td input,td select{width:100%;padding:2px 5px;font-size:20.5px}
 
 /* ---- 칸반 ---- */
 .kanban{display:flex;gap:12px;align-items:flex-start;overflow-x:auto;padding-bottom:12px;min-height:60vh}
-.kcol{flex:0 0 272px;background:var(--wkend-strong);border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 230px)}
+.kcol{flex:1 0 270px;max-width:420px;background:var(--wkend-strong);border-radius:12px;display:flex;flex-direction:column;max-height:calc(100vh - 230px)}
 .kcol.over{outline:2px dashed var(--accent);outline-offset:-2px}
-.kcol-h{display:flex;align-items:center;gap:7px;padding:10px 12px 6px;font-size:20.5px}
-.kcnt{background:var(--panel);color:var(--muted);border-radius:9px;padding:0 7px;font-size:16.5px;font-weight:700}
-.kcol-body{flex:1;overflow-y:auto;padding:4px 8px;display:flex;flex-direction:column;gap:8px;min-height:60px}
-.kempty{border:2px dashed var(--line);border-radius:9px;color:var(--muted);font-size:17.5px;text-align:center;padding:14px 6px}
+.kcol-h{display:flex;align-items:center;gap:8px;padding:12px 14px 8px;font-size:26px}
+.kcnt{background:var(--panel);color:var(--muted);border-radius:9px;padding:0 7px;font-size:22px;font-weight:700}
+.kcol-body{flex:1;overflow-y:auto;padding:4px 10px;display:flex;flex-direction:column;gap:10px;min-height:60px}
+.kempty{border:2px dashed var(--line);border-radius:9px;color:var(--muted);font-size:23px;text-align:center;padding:14px 6px}
 .kcard-wrap{touch-action:manipulation;outline:none;border-radius:9px}
 .kcard-wrap:focus-visible{box-shadow:0 0 0 2px var(--accent)}
 .kcard-wrap.ghost .kcard{opacity:.35;border-style:dashed}
-.kcard{background:var(--panel);border:1px solid var(--line);border-radius:9px;padding:9px 11px;cursor:grab;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
+.kcard{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:12px 14px;cursor:grab;display:flex;flex-direction:column;gap:5px;box-shadow:0 1px 2px rgba(0,0,0,.05)}
 .kcard:hover{border-color:var(--accent)}
 .kcard.dragging{cursor:grabbing;box-shadow:0 10px 24px rgba(0,0,0,.18);transform:rotate(1.5deg)}
 .kcard.done .kt{text-decoration:line-through;color:var(--muted)}
-.kt{font-size:19px;line-height:1.35;word-break:break-word}
-.kprio{font-size:15.5px;font-weight:700}
+.kt{font-size:24.5px;line-height:1.35;word-break:break-word}
+.kprio{font-size:21px;font-weight:700}
 .ktags{display:flex;flex-wrap:wrap;gap:4px}
-.ktag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:5px;font-size:15.5px;padding:0 6px;margin:1px 3px 1px 0}
-.kmeta{display:flex;align-items:center;gap:8px;font-size:16.5px;color:var(--muted)}
+.ktag{display:inline-block;background:var(--accent-soft);color:var(--accent);border-radius:5px;font-size:21px;padding:0 6px;margin:1px 3px 1px 0}
+.kmeta{display:flex;flex-wrap:wrap;align-items:center;gap:4px 10px;font-size:22px;color:var(--muted)}
+.kmeta>*{white-space:nowrap}
 .kdue.late{color:var(--late);font-weight:700}.kdue.soon{color:var(--soon);font-weight:700}
 .kchk.all{color:var(--done)}
 .avatar.sm{width:22px;height:22px;font-size:15px}
-.kadd{border:0;background:none;color:var(--muted);text-align:left;padding:8px 14px 12px;cursor:pointer;font-size:18.5px;border-radius:0 0 12px 12px}
+.kadd{border:0;background:none;color:var(--muted);text-align:left;padding:8px 14px 12px;cursor:pointer;font-size:24px;border-radius:0 0 12px 12px}
+.kcard .avatar.sm{width:28px;height:28px;font-size:19px}
 .kadd:hover{color:var(--accent);background:var(--hover)}
 .kadd-form{padding:6px 8px 10px;display:flex;flex-direction:column;gap:4px}
 .kadd-form input{width:100%}
@@ -303,6 +305,6 @@ tr.sel td{background:var(--accent-soft)}
 .rv-box{border:1px solid var(--soon);background:var(--soon-soft);border-radius:9px;padding:10px 12px;margin-bottom:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}
 .rv-box.rej{border-color:var(--late);background:var(--late-soft)}
 .rv-box.ok{border-color:var(--done);background:var(--done-soft)}
-.krev{font-size:15.5px;font-weight:700;border-radius:5px;padding:0 6px;background:var(--soon-soft);color:var(--soon)}
+.krev{font-size:21px;font-weight:700;border-radius:5px;padding:0 6px;background:var(--soon-soft);color:var(--soon)}
 .krev.rej{background:var(--late-soft);color:var(--late)}
 .att-list{display:flex;flex-wrap:wrap;gap:4px 12px}
