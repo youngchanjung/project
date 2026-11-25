@@ -1,0 +1,290 @@
+import { Router } from 'express';
+import { db } from '../db.js';
+import { ah, HttpError, now, audit, insertId, pick, diff, optDate, projectCalendar } from '../util.js';
+import { requireLogin } from '../auth.js';
+import { recalc, wouldCycle } from '../schedule.js';
+import { need, loadProject } from './projects.js';
+import { notify, recipientsOf } from '../notify.js';
+
+export const tasksRouter = Router({ mergeParams: true });
+tasksRouter.use(requireLogin);
+
+export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의'];
+export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
+export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
+const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
+  'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
+  'board_column_id', 'priority', 'tags', 'reviewer_id'];
+const ymd = () => new Date().toISOString().slice(0, 10);
+
+function clean(body, partial) {
+  const t = pick(body || {}, COLS);
+  for (const f of ['start', 'end', 'baseline_start', 'baseline_end', 'actual_end', 'not_before']) {
+    if (t[f] !== undefined) t[f] = optDate(t[f], f);
+  }
+  if (!partial || t.name !== undefined) {
+    if (!String(t.name || '').trim()) throw new HttpError(400, '작업명을 입력하세요.');
+    t.name = String(t.name).trim();
+  }
+  if (!partial) {
+    // 날짜 없이도 만들 수 있음 (칸반·할 일). 그때는 만든 날로 채우고 undated 표시
+    if (!t.start && !t.end) { t.start = t.end = ymd(); t.undated = true; }
+    else { if (!t.start) t.start = t.end; if (!t.end) t.end = t.start; t.undated = false; }
+  } else if ('start' in t || 'end' in t) {
+    if (!t.start && !t.end && 'start' in t && 'end' in t) { t.start = t.end = ymd(); t.undated = true; }
+    else {
+      if ('start' in t && !t.start) t.start = t.end || undefined;
+      if ('end' in t && !t.end) t.end = t.start || undefined;
+      for (const f of ['start', 'end']) if (t[f] === undefined) delete t[f];
+      t.undated = false;
+    }
+  }
+  if (t.type !== undefined && !TASK_TYPES.includes(t.type)) throw new HttpError(400, `유형은 ${TASK_TYPES.join('/')} 중 하나입니다.`);
+  if (t.status !== undefined && !TASK_STATUS.includes(t.status)) throw new HttpError(400, `상태는 ${TASK_STATUS.join('/')} 중 하나입니다.`);
+  if (t.is_key !== undefined) t.is_key = !!t.is_key;
+  if (t.priority !== undefined && !TASK_PRIORITY.includes(t.priority)) throw new HttpError(400, `우선순위는 ${TASK_PRIORITY.join('/')} 중 하나입니다.`);
+  if (t.tags !== undefined) t.tags = String(t.tags || '').split(',').map(x => x.trim()).filter(Boolean).join(', ') || null;
+  if (t.progress !== undefined) t.progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
+  for (const f of ['phase_id', 'assignee_id', 'board_column_id', 'reviewer_id']) if (t[f] !== undefined) t[f] = t[f] ? Number(t[f]) : null;
+  return t;
+}
+
+// 프로젝트 전체 재계산 후 바뀐 작업을 저장. 바뀐 목록 반환
+export async function applyRecalc(trx, projectId, user) {
+  const p = await trx('projects').where({ id: projectId }).first();
+  const hol = await projectCalendar(trx, p);
+  const tasks = await trx('tasks').where({ project_id: projectId, undated: false });
+  const deps = await trx('dependencies').where({ project_id: projectId });
+  const changed = recalc(tasks, deps, hol);
+  const byId = new Map(tasks.map(t => [t.id, t]));
+  for (const c of changed) {
+    const before = byId.get(c.id);
+    await trx('tasks').where({ id: c.id }).update({ start: c.start, end: c.end, version: before.version + 1, updated_at: now(), updated_by: user?.id ?? null });
+    await audit(trx, { user, projectId, entity: 'task', entityId: c.id, action: 'auto', label: `${before.name} (선행작업에 따라 자동 조정)`, changes: { start: [before.start, c.start], end: [before.end, c.end] } });
+    await notify(trx, await recipientsOf(trx, before), { kind: 'task_changed', projectId, entity: 'task', entityId: c.id, actorId: user?.id,
+      params: { name: before.name, code: before.code, from: `${before.start}~${before.end}`, to: `${c.start}~${c.end}`, by: user?.name, auto: true } });
+  }
+  return changed;
+}
+
+async function checkRefs(trx, projectId, t) {
+  if (t.phase_id && !(await trx('phases').where({ id: t.phase_id, project_id: projectId }).first())) throw new HttpError(400, '단계가 이 프로젝트에 없습니다.');
+  if (t.assignee_id && !(await trx('users').where({ id: t.assignee_id }).first())) throw new HttpError(400, '담당자 계정이 없습니다.');
+  if (t.reviewer_id && !(await trx('users').where({ id: t.reviewer_id }).first())) throw new HttpError(400, '검토자 계정이 없습니다.');
+  if (t.board_column_id && !(await trx('board_columns').where({ id: t.board_column_id, project_id: projectId }).first())) throw new HttpError(400, '칸반 열이 이 프로젝트에 없습니다.');
+  if (t.start && t.end && t.end < t.start) throw new HttpError(400, '종료일이 시작일보다 빠릅니다.');
+}
+
+tasksRouter.post('/', ah(async (req, res) => {
+  const pid = Number(req.params.pid);
+  await loadProject(pid);
+  await need(req, pid);
+  const t = clean(req.body, false);
+  const result = await db.transaction(async trx => {
+    await checkRefs(trx, pid, t);
+    if (t.sort === undefined) { const { m } = await trx('tasks').where({ project_id: pid }).max({ m: 'sort' }).first(); t.sort = (m ?? 0) + 1; }
+    if (t.board_column_id) {
+      const col = await trx('board_columns').where({ id: t.board_column_id }).first();
+      if (req.body.status === undefined) t.status = col.status;
+      const { m } = await trx('tasks').where({ board_column_id: t.board_column_id }).max({ m: 'board_order' }).first();
+      t.board_order = (m ?? 0) + 1;
+    }
+    if (t.status === '완료') { t.actual_end = t.actual_end || ymd(); t.progress = 100; }
+    const id = await insertId(trx, 'tasks', { ...t, project_id: pid, created_at: now(), updated_at: now(), updated_by: req.user.id });
+    await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: id, action: 'create', label: t.name });
+    await notify(trx, await recipientsOf(trx, t), { kind: 'task_assigned', projectId: pid, entity: 'task', entityId: id, actorId: req.user.id, params: { name: t.name, code: t.code, by: req.user.name } });
+    return { id };
+  });
+  res.json({ task: await db('tasks').where({ id: result.id }).first(), shifted: [] });
+}));
+
+tasksRouter.patch('/:tid', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid);
+  await need(req, pid);
+  const up = clean(req.body, true);
+  const shifted = await db.transaction(async trx => {
+    const before = await trx('tasks').where({ id: tid, project_id: pid }).first();
+    if (!before) throw new HttpError(404, '작업이 없습니다.');
+    // 동시 수정 방지: 화면에서 받은 version 과 다르면 거절
+    if (req.body.version !== undefined && Number(req.body.version) !== before.version) {
+      throw new HttpError(409, '다른 사람이 먼저 이 작업을 수정했습니다. 새로고침 후 다시 시도하세요.', { current: before });
+    }
+    if (up.status === '완료' && !before.actual_end && up.actual_end === undefined) up.actual_end = new Date().toISOString().slice(0, 10);
+    if (up.status && up.status !== '완료' && before.status === '완료' && up.actual_end === undefined) up.actual_end = null;
+    if (up.status === '완료' && up.progress === undefined) up.progress = 100;
+    await checkRefs(trx, pid, { ...before, ...up });
+    // 상태만 바꾸면 칸반 열도 그 상태의 열로 맞춤 (열을 직접 고른 경우는 그대로)
+    if (up.status && up.status !== before.status && up.board_column_id === undefined && before.board_column_id) {
+      const cur = await trx('board_columns').where({ id: before.board_column_id }).first();
+      if (cur && cur.status !== up.status) up.board_column_id = (await trx('board_columns').where({ project_id: pid, status: up.status }).orderBy('sort').first())?.id ?? null;
+    }
+    const ch = diff(before, up);
+    if (!Object.keys(ch).length) return [];
+    await trx('tasks').where({ id: tid }).update({ ...up, version: before.version + 1, updated_at: now(), updated_by: req.user.id });
+    await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'update', label: up.name || before.name, changes: ch });
+    const after = { ...before, ...up };
+    const oldR = new Set(await recipientsOf(trx, before)), newR = await recipientsOf(trx, after);
+    const base = { projectId: pid, entity: 'task', entityId: tid, actorId: req.user.id };
+    await notify(trx, newR.filter(u => !oldR.has(u)), { ...base, kind: 'task_assigned', params: { name: after.name, code: after.code, by: req.user.name } });
+    if (ch.start || ch.end) await notify(trx, newR.filter(u => oldR.has(u)), { ...base, kind: 'task_changed', params: { name: after.name, code: after.code, from: `${before.start}~${before.end}`, to: `${after.start}~${after.end}`, by: req.user.name } });
+    if (ch.start || ch.end || ch.status || ch.not_before) return applyRecalc(trx, pid, req.user);
+    return [];
+  });
+  res.json({ task: await db('tasks').where({ id: tid }).first(), shifted });
+}));
+
+tasksRouter.delete('/:tid', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid);
+  await need(req, pid);
+  await db.transaction(async trx => {
+    const t = await trx('tasks').where({ id: tid, project_id: pid }).first();
+    if (!t) throw new HttpError(404, '작업이 없습니다.');
+    await trx('dependencies').where('pred_id', tid).orWhere('succ_id', tid).del();
+    await trx('issues').where({ task_id: tid }).update({ task_id: null });
+    await trx('task_checklist').where({ task_id: tid }).del();
+    await trx('tasks').where({ id: tid }).del();
+    await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'delete', label: t.name, changes: { start: [t.start, null], end: [t.end, null] } });
+  });
+  res.json({ ok: true });
+}));
+
+// ---- 칸반: 카드 이동 { column_id, index } → 열·순서·상태를 한 번에 바꿈 ----
+tasksRouter.post('/:tid/move', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid);
+  await need(req, pid);
+  const colId = Number(req.body?.column_id);
+  const out = await db.transaction(async trx => {
+    const t = await trx('tasks').where({ id: tid, project_id: pid }).first();
+    if (!t) throw new HttpError(404, '작업이 없습니다.');
+    const cols = await trx('board_columns').where({ project_id: pid }).orderBy('sort');
+    const col = cols.find(c => c.id === colId);
+    if (!col) throw new HttpError(400, '칸반 열이 이 프로젝트에 없습니다.');
+    // 이 열에 보이는 카드 순서 (열이 지정 안 된 카드는 상태가 같은 첫 열에 보임)
+    const all = await trx('tasks').where({ project_id: pid }).whereNot({ id: tid });
+    const colOf = x => (x.board_column_id && cols.some(c => c.id === x.board_column_id)) ? x.board_column_id
+      : (cols.find(c => c.status === x.status)?.id ?? cols[0].id);
+    const inCol = all.filter(x => colOf(x) === colId).sort((a, b) => a.board_order - b.board_order || a.id - b.id);
+    const idx = Math.max(0, Math.min(inCol.length, Number.isFinite(Number(req.body?.index)) ? Number(req.body.index) : inCol.length));
+    inCol.splice(idx, 0, t);
+    for (const [i, x] of inCol.entries()) {
+      if (x.id === tid) continue;
+      if (x.board_order !== i || x.board_column_id !== colId) await trx('tasks').where({ id: x.id }).update({ board_order: i, board_column_id: colId });
+    }
+    const up = { board_column_id: colId, board_order: idx };
+    if (t.status !== col.status) {
+      up.status = col.status;
+      if (col.status === '완료') { up.actual_end = t.actual_end || ymd(); up.progress = 100; }
+      else if (t.status === '완료') up.actual_end = null;
+    }
+    await trx('tasks').where({ id: tid }).update({ ...up, version: t.version + 1, updated_at: now(), updated_by: req.user.id });
+    if (t.board_column_id !== colId || up.status) {
+      const fromCol = cols.find(c => c.id === colOf(t));
+      await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'move', label: `${t.name}: ${fromCol?.name || ''} → ${col.name}`, changes: up.status ? { status: [t.status, up.status] } : null });
+    }
+    return up.status ? await applyRecalc(trx, pid, req.user) : [];
+  });
+  res.json({ task: await db('tasks').where({ id: tid }).first(), shifted: out });
+}));
+
+// ---- 체크리스트 ----
+async function loadTask(pid, tid) {
+  const t = await db('tasks').where({ id: tid, project_id: pid }).first();
+  if (!t) throw new HttpError(404, '작업이 없습니다.');
+  return t;
+}
+tasksRouter.post('/:tid/checklist', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid);
+  await need(req, pid);
+  const t = await loadTask(pid, tid);
+  const text = String(req.body?.text || '').trim();
+  if (!text) throw new HttpError(400, '내용을 입력하세요.');
+  const { m } = await db('task_checklist').where({ task_id: tid }).max({ m: 'sort' }).first();
+  const id = await insertId(db, 'task_checklist', { task_id: tid, text: text.slice(0, 300), done: false, sort: (m ?? -1) + 1 });
+  await audit(null, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'checklist', label: `${t.name}: + ${text}` });
+  res.json(await db('task_checklist').where({ id }).first());
+}));
+tasksRouter.patch('/:tid/checklist/:cid', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid), cid = Number(req.params.cid);
+  await need(req, pid);
+  await loadTask(pid, tid);
+  const up = pick(req.body || {}, ['text', 'done', 'sort']);
+  if (up.done !== undefined) up.done = !!up.done;
+  if (up.text !== undefined) { up.text = String(up.text).trim().slice(0, 300); if (!up.text) throw new HttpError(400, '내용을 입력하세요.'); }
+  await db('task_checklist').where({ id: cid, task_id: tid }).update(up);
+  res.json(await db('task_checklist').where({ id: cid }).first());
+}));
+tasksRouter.delete('/:tid/checklist/:cid', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid), cid = Number(req.params.cid);
+  await need(req, pid);
+  await loadTask(pid, tid);
+  await db('task_checklist').where({ id: cid, task_id: tid }).del();
+  res.json({ ok: true });
+}));
+
+// ---- 여러 작업 한 번에 상태 바꾸기 (할 일 목록의 일괄 완료) ----
+tasksRouter.post('/bulk-status', ah(async (req, res) => {
+  const pid = Number(req.params.pid);
+  await need(req, pid);
+  const status = req.body?.status;
+  if (!TASK_STATUS.includes(status)) throw new HttpError(400, `상태는 ${TASK_STATUS.join('/')} 중 하나입니다.`);
+  const ids = (req.body?.ids || []).map(Number).filter(Boolean);
+  const shifted = await db.transaction(async trx => {
+    const ts = await trx('tasks').where({ project_id: pid }).whereIn('id', ids);
+    const col = (await trx('board_columns').where({ project_id: pid, status }).orderBy('sort').first())?.id ?? null;
+    for (const t of ts) {
+      if (t.status === status) continue;
+      const up = { status, board_column_id: col };
+      if (status === '완료') { up.actual_end = t.actual_end || ymd(); up.progress = 100; } else if (t.status === '완료') up.actual_end = null;
+      await trx('tasks').where({ id: t.id }).update({ ...up, version: t.version + 1, updated_at: now(), updated_by: req.user.id });
+      await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: t.id, action: 'update', label: t.name, changes: { status: [t.status, status] } });
+    }
+    return applyRecalc(trx, pid, req.user);
+  });
+  res.json({ updated: ids.length, shifted });
+}));
+
+// ---- 선행관계 ----
+export const depsRouter = Router({ mergeParams: true });
+depsRouter.use(requireLogin);
+depsRouter.post('/', ah(async (req, res) => {
+  const pid = Number(req.params.pid);
+  await need(req, pid);
+  const pred_id = Number(req.body?.pred_id), succ_id = Number(req.body?.succ_id);
+  const kind = ['FS', 'SS', 'FF'].includes(req.body?.kind) ? req.body.kind : 'FS';
+  const lag = Math.round(Number(req.body?.lag) || 0);
+  const out = await db.transaction(async trx => {
+    const ts = await trx('tasks').whereIn('id', [pred_id, succ_id]).andWhere({ project_id: pid });
+    if (ts.length !== 2) throw new HttpError(400, '같은 프로젝트의 서로 다른 두 작업을 고르세요.');
+    const deps = await trx('dependencies').where({ project_id: pid });
+    if (wouldCycle(deps, pred_id, succ_id)) throw new HttpError(400, '순환 관계가 됩니다. (서로가 서로의 선행작업)');
+    if (deps.find(d => d.pred_id === pred_id && d.succ_id === succ_id && d.kind === kind)) throw new HttpError(400, '이미 있는 관계입니다.');
+    const id = await insertId(trx, 'dependencies', { project_id: pid, pred_id, succ_id, kind, lag });
+    const p = ts.find(t => t.id === pred_id), s = ts.find(t => t.id === succ_id);
+    await audit(trx, { user: req.user, projectId: pid, entity: 'dependency', entityId: id, action: 'create', label: `${p.name} → ${s.name} (${kind}${lag ? ` ${lag > 0 ? '+' : ''}${lag}일` : ''})` });
+    const shifted = await applyRecalc(trx, pid, req.user);
+    return { dep: await trx('dependencies').where({ id }).first(), shifted };
+  });
+  res.json(out);
+}));
+depsRouter.patch('/:did', ah(async (req, res) => {
+  const pid = Number(req.params.pid), did = Number(req.params.did);
+  await need(req, pid);
+  const out = await db.transaction(async trx => {
+    const d = await trx('dependencies').where({ id: did, project_id: pid }).first();
+    if (!d) throw new HttpError(404, '관계가 없습니다.');
+    const up = {};
+    if (['FS', 'SS', 'FF'].includes(req.body?.kind)) up.kind = req.body.kind;
+    if (req.body?.lag !== undefined) up.lag = Math.round(Number(req.body.lag) || 0);
+    await trx('dependencies').where({ id: did }).update(up);
+    await audit(trx, { user: req.user, projectId: pid, entity: 'dependency', entityId: did, action: 'update', changes: diff(d, up) });
+    return { shifted: await applyRecalc(trx, pid, req.user) };
+  });
+  res.json(out);
+}));
+depsRouter.delete('/:did', ah(async (req, res) => {
+  const pid = Number(req.params.pid), did = Number(req.params.did);
+  await need(req, pid);
+  await db('dependencies').where({ id: did, project_id: pid }).del();
+  await audit(null, { user: req.user, projectId: pid, entity: 'dependency', entityId: did, action: 'delete' });
+  res.json({ ok: true });
+}));

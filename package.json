@@ -1,0 +1,17 @@
+{
+  "name": "rnd-schedule",
+  "version": "0.1.0",
+  "private": true,
+  "description": "R&D 프로젝트 일정관리 웹 프로그램",
+  "workspaces": ["server", "web"],
+  "scripts": {
+    "dev": "npm run dev -w server & npm run dev -w web",
+    "build": "npm run build -w web",
+    "start": "npm run start -w server",
+    "migrate": "npm run migrate -w server",
+    "backup": "npm run backup -w server",
+    "test": "npm test -w server",
+    "i18n:check": "node scripts/i18n.mjs"
+  },
+  "engines": { "node": ">=20" }
+}
