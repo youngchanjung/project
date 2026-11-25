@@ -6,6 +6,7 @@ import { fmtY, dow, downloadXLSX } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import { COUNTRIES } from '../countries.js';
 import { tr } from '../i18n.js';
+import DateInput from '../components/DateInput.jsx';
 
 export default function Admin() {
   const [depts, setDepts] = useState([]);
@@ -283,7 +284,7 @@ function Holidays() {
         <ExportButton toast={toast} make={() => downloadXLSX(`공휴일_${country}${year ? '_' + year : ''}`, [{ name: `${country} ${year || ''}`.trim(), rows: shown, cols: [['date', '날짜'], [h => dow(h.date), '요일'], ['name', '이름'], ['country', '국가']] }])} />
       </div>
       {err && <div className="err">{err}</div>}
-      <div className="toolbar"><input type="date" value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /><input type="text" placeholder={tr('이름')} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><button className="btn primary" onClick={add}>{tr('추가')}</button>
+      <div className="toolbar"><DateInput value={f.date} onChange={e => setF({ ...f, date: e.target.value })} /><input type="text" placeholder={tr('이름')} value={f.name} onChange={e => setF({ ...f, name: e.target.value })} /><button className="btn primary" onClick={add}>{tr('추가')}</button>
         <button className="btn" onClick={() => setBulk(bulk === null ? '' : null)}>{tr('여러 날 붙여넣기')}</button></div>
       {bulk !== null && <div style={{ marginBottom: 12 }}>
         <textarea value={bulk} onChange={e => setBulk(e.target.value)} placeholder={tr('한 줄에 하루씩: 날짜 이름') + '\n2027-01-01 …\n2027-02-05 …\n' + tr('(엑셀에서 날짜·이름 두 칸을 복사해 붙여 넣어도 됩니다)')} style={{ minHeight: 120 }} />

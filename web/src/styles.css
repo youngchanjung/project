@@ -308,3 +308,23 @@ tr.sel td{background:var(--accent-soft)}
 .krev{font-size:21px;font-weight:700;border-radius:5px;padding:0 6px;background:var(--soon-soft);color:var(--soon)}
 .krev.rej{background:var(--late-soft);color:var(--late)}
 .att-list{display:flex;flex-wrap:wrap;gap:4px 12px}
+/* 큰 날짜 선택 달력 (components/DateInput.jsx) */
+.dinput{display:inline-flex;align-items:center;gap:2px;position:relative;vertical-align:middle}
+.dinput input[type=date]{width:auto}
+.dinput input[type=date]::-webkit-calendar-picker-indicator{display:none}
+.dinput-btn{border:1px solid var(--line);background:var(--panel);border-radius:7px;cursor:pointer;font-size:20px;line-height:1;padding:6px 8px}
+.dinput-btn:hover{border-color:var(--accent)}
+.dpick{position:fixed;z-index:200;background:var(--panel);border:1px solid var(--line);border-radius:14px;box-shadow:0 12px 36px rgba(0,0,0,.22);padding:16px 18px 14px}
+.dpick-h{display:flex;align-items:center;gap:6px;margin-bottom:10px}
+.dpick-t{flex:1;text-align:center;font-size:26px}
+.dpick-nav{border:1px solid var(--line);background:var(--panel);border-radius:9px;cursor:pointer;font-size:26px;width:52px;height:48px;line-height:1}
+.dpick-nav:hover{border-color:var(--accent);color:var(--accent)}
+.dpick-g{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.dpick-w{text-align:center;font-size:19px;font-weight:700;color:var(--muted);padding:4px 0 6px}
+.dpick-w.we,.dpick-d.we{color:var(--late)}
+.dpick-d{height:60px;border:0;border-radius:10px;background:none;cursor:pointer;font-size:24px;font-variant-numeric:tabular-nums;color:var(--text)}
+.dpick-d:hover{background:var(--hover)}
+.dpick-d.td{box-shadow:inset 0 0 0 2px var(--accent);font-weight:700}
+.dpick-d.sel{background:var(--accent);color:#fff;font-weight:700}
+.dpick-f{display:flex;gap:8px;align-items:center;margin-top:12px}
+.dpick-f .btn{font-size:20px;padding:8px 18px}

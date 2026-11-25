@@ -7,6 +7,7 @@ import { TASK_TYPES, TASK_STATUS, TASK_PRIORITY, fmtY, diff, ddayLabel, catOf, c
 import { useApp } from '../App.jsx';
 import { tr } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
+import DateInput from './DateInput.jsx';
 
 const KIND = { FS: '끝나면 시작', SS: '동시 시작', FF: '동시 종료' };
 
@@ -88,7 +89,7 @@ export default function TaskModal({ id, preset, onClose }) {
               <label className="small"><input type="checkbox" checked={!!f.is_key} onChange={set('is_key')} /> {tr('핵심 ★')}</label></div></>}
           {isMeeting && <>
             <label>{tr('일시')}</label>
-            <div className="row"><input type="date" value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: e.target.value })} />
+            <div className="row"><DateInput value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: e.target.value })} />
               <input type="time" value={f.start_time || ''} onChange={e => setF({ ...f, start_time: e.target.value, end_time: !f.end_time || f.end_time <= e.target.value ? plus1h(e.target.value) : f.end_time })} /> ~
               <input type="time" value={f.end_time || ''} onChange={set('end_time')} /></div>
             <label>{tr('장소')}</label><input type="text" value={f.location || ''} onChange={set('location')} placeholder={tr('예: 3층 회의실')} />
@@ -105,7 +106,7 @@ export default function TaskModal({ id, preset, onClose }) {
           <label>{tr(isMeeting ? '주관' : '담당자')}</label><select value={f.assignee_id} onChange={set('assignee_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select>
           {!isCons && !isMeeting && <><label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함 · PM이 검토)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></>}
           {!isMeeting && <><label>{tr(f.type === '마일스톤' || f.type === '제출' ? '날짜' : '마감일')}</label>
-          <div className="row"><input type="date" value={f.end || ''} onChange={e => setF({ ...f, end: e.target.value, start: f.start && e.target.value && f.start > e.target.value ? e.target.value : f.start })} />
+          <div className="row"><DateInput value={f.end || ''} onChange={e => setF({ ...f, end: e.target.value, start: f.start && e.target.value && f.start > e.target.value ? e.target.value : f.start })} />
             {f.end && <button type="button" className="btn sm" onClick={() => setF({ ...f, end: '', start: '' })}>{tr('날짜 지우기')}</button>}
             {!f.end && <span className="small">{tr('비워 두면 날짜 없는 할 일 (간트·달력에는 안 보임)')}</span>}
             {f.start && f.end && f.start !== f.end && <span className="small">{fmtY(f.start)} ~ · {diff(f.start, f.end) + 1}{tr('일')}</span>}</div></>}
@@ -123,7 +124,7 @@ export default function TaskModal({ id, preset, onClose }) {
           <div className="full"><button type="button" className="linkbtn" onClick={toggleDet}>{det ? '▾' : '▸'} {tr(det ? '자세히 접기' : '자세히 (시작일·단계·유형·선행관계·기준 일정 등)')}</button></div>
           {det && <>
             <label>{tr('시작일')}</label>
-            <div className="row"><input type="date" value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: !f.end || f.end < e.target.value ? e.target.value : f.end })} />
+            <div className="row"><DateInput value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: !f.end || f.end < e.target.value ? e.target.value : f.end })} />
               {f.start && f.end && <span className="small">{diff(f.start, f.end) + 1}{tr('일')}</span>}</div>
             <label>{tr('단계')}</label><select value={f.phase_id} onChange={set('phase_id')}><option value="">{tr('(없음)')}</option>{phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
             <label>{tr(isCons ? 'ID · 유형' : 'ID')}</label>
@@ -135,9 +136,9 @@ export default function TaskModal({ id, preset, onClose }) {
             {isCons && <><label>{tr('검토자')}</label><select value={f.reviewer_id} onChange={set('reviewer_id')}><option value="">{tr('(지정 안 함)')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></>}
             <label>{tr('진행률')}</label>
             <div className="row"><input type="number" min="0" max="100" step="10" value={f.progress} onChange={set('progress')} style={{ width: 80 }} />%
-              {f.status === '완료' && <>{tr('실제 완료일')} <input type="date" value={f.actual_end || ''} onChange={set('actual_end')} /></>}</div>
-            <label>{tr('최초 가능일')}</label><div className="row"><input type="date" value={f.not_before || ''} onChange={set('not_before')} /><span className="small">{tr('자동 계산 시 이 날짜보다 앞당기지 않음')}</span></div>
-            <label>{tr('기준 일정')}</label><div className="row"><input type="date" value={f.baseline_start || ''} onChange={set('baseline_start')} /> ~ <input type="date" value={f.baseline_end || ''} onChange={set('baseline_end')} />
+              {f.status === '완료' && <>{tr('실제 완료일')} <DateInput value={f.actual_end || ''} onChange={set('actual_end')} /></>}</div>
+            <label>{tr('최초 가능일')}</label><div className="row"><DateInput value={f.not_before || ''} onChange={set('not_before')} /><span className="small">{tr('자동 계산 시 이 날짜보다 앞당기지 않음')}</span></div>
+            <label>{tr('기준 일정')}</label><div className="row"><DateInput value={f.baseline_start || ''} onChange={set('baseline_start')} /> ~ <DateInput value={f.baseline_end || ''} onChange={set('baseline_end')} />
               {t?.baseline_end && !t.undated && t.end !== t.baseline_end && <span className="small" style={{ color: t.end > t.baseline_end ? 'var(--late)' : 'var(--done)' }}>{tr('편차')} {diff(t.baseline_end, t.end) > 0 ? '+' : ''}{diff(t.baseline_end, t.end)}{tr('일')}</span>}</div>
             <label>{tr('계약 조항')}</label><input type="text" value={f.ref || ''} onChange={set('ref')} />
           </>}

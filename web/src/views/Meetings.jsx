@@ -7,6 +7,7 @@ import { today } from '../util.js';
 import { tr, getLang, locale } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 import Recorder from '../components/Recorder.jsx';
+import DateInput from '../components/DateInput.jsx';
 
 const LANG_OPT = [['ko', '한국어'], ['vi', '베트남어'], ['en', '영어'], ['multi', '여러 언어 섞임']];
 const STATUS = {
@@ -291,7 +292,7 @@ function SummaryEditor({ value: v, onChange, onSave, onCancel }) {
         <div>{v.action_items.map((a, i) => <div key={i} className="row" style={{ gap: 6, marginBottom: 4 }}>
           <input type="text" value={a.task} onChange={setItem('action_items', i, 'task')} style={{ flex: 1 }} />
           <input type="text" value={a.owner} onChange={setItem('action_items', i, 'owner')} placeholder={tr('담당')} style={{ width: 110 }} />
-          <input type="date" value={a.due} onChange={setItem('action_items', i, 'due')} />
+          <DateInput value={a.due} onChange={setItem('action_items', i, 'due')} />
           <button className="btn sm" onClick={() => delItem('action_items', i)}>×</button></div>)}
           <button className="btn sm" onClick={() => onChange({ ...v, action_items: [...v.action_items, { task: '', owner: '', due: '' }] })}>{tr('+ 할 일')}</button></div>
         <label>{tr('이슈')}</label>
