@@ -225,3 +225,30 @@ test('Teams 채널: 웹후크 저장(PM만 보임)·시험 보내기·검토 요
   await call('PATCH', `/api/projects/${p.id}`, { teams_webhook: '' });
   assert.equal((await call('GET', `/api/projects/${p.id}/data`)).body.project.teams_on, false);
 });
+
+test('관리 화면: 연동 상태(비밀 값 없음)·시험 메일·Outlook 다시 맞추기', async () => {
+  const st = (await call('GET', '/api/m365')).body;
+  assert.equal(st.ready, true);
+  assert.equal(st.features.mail, true);
+  assert.equal(st.settings.secret, true);
+  assert.ok(!JSON.stringify(st).includes('"sec"'));
+  ms.mails.length = 0;
+  const r = await call('POST', '/api/m365/test-mail', {});
+  assert.equal(r.status, 200); assert.equal(r.body.to, 'admin@corp.test');
+  assert.equal(ms.mails.length, 1);
+  assert.equal((await call('POST', '/api/m365/resync')).status, 200);
+  assert.ok((await call('GET', '/api/m365')).body.logs.some(l => l.message.includes('시험 메일')));
+  // 일반 직원은 못 봄
+  const keep = cookie;
+  await call('POST', '/api/auth/login', { username: 'choi', password: 'pass12345' });
+  assert.equal((await call('GET', '/api/m365')).status, 403);
+  cookie = keep;
+});
+
+test('키가 없으면 모두 꺼지고 아이디 로그인만', async () => {
+  const save = { ...config.m365 };
+  Object.assign(config.m365, { tenantId: '', clientId: '', clientSecret: '' });
+  assert.deepEqual((await call('GET', '/api/auth/providers')).body, { m365: false, localLogin: 'all', mail: false, outlook: false });
+  assert.equal((await call('GET', '/api/auth/m365/start')).status, 404);
+  Object.assign(config.m365, save);
+});

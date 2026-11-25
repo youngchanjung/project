@@ -619,3 +619,4 @@ tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--hover)}
 .msq i:nth-child(1){background:#f25022}.msq i:nth-child(2){background:#7fba00}.msq i:nth-child(3){background:#00a4ef}.msq i:nth-child(4){background:#ffb900}
 .login-or{text-align:center;margin:4px 0}
 .bell-mail{display:flex;gap:6px;align-items:flex-start;padding:8px 12px;border-top:1px solid var(--line)}
+.err-t{color:var(--late);font-weight:600}

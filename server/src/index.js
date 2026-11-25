@@ -24,6 +24,7 @@ import { issuesRouter } from './routes/issues.js';
 import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
+import { m365Router } from './routes/m365.js';
 import { startScheduler, onPeriodic, onDaily } from './scheduler.js';
 import { scheduleSync, syncAll } from './outlook.js';
 import { dailyDigest } from './teams.js';
@@ -62,6 +63,7 @@ export function createApp() {
   api.use('/users', usersRouter);
   api.use('/departments', departmentsRouter);
   api.use('/backup', backupRouter);
+  api.use('/m365', m365Router);
   api.use('/translate', translateRouter);
   api.use('/sheet.xlsx', sheetRouter);
   api.use('/me/calendar', calendarRouter);
