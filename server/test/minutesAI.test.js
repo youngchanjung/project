@@ -2,7 +2,7 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 process.env.DB_CLIENT = 'sqlite';
 const { summarizeMeeting, buildPrompt, transcriptText, SUMMARY_SCHEMA } = await import('../src/minutesAI.js');
-const { sttConfig } = await import('../src/stt.js');
+const { sttDefinition } = await import('../src/stt.js');
 
 test('전사본 문장: 시각과 화자 이름', () => {
   assert.equal(transcriptText([{ t: 3723000, spk: 1, text: '안녕' }], { 1: '김' }), '[01:02:03] 김: 안녕');
@@ -23,31 +23,62 @@ test('구조화 출력 스키마: 모든 객체가 additionalProperties=false, r
   assert.match(buildPrompt({ meeting: { title: 't' }, project: { name: 'p' }, members: [{ name: '김' }], notes: '메모', outLang: 'vi' }), /Vietnamese[\s\S]*<회의_메모>/);
 });
 
-test('회의 언어별 음성인식 모델', () => {
-  assert.equal(sttConfig('ko').model_name, 'sommers');
-  assert.deepEqual([sttConfig('vi').model_name, sttConfig('vi').language], ['whisper', 'vi']);
-  assert.deepEqual(sttConfig('multi').language_candidates, ['ko', 'vi', 'en']);
-  assert.equal(sttConfig('ko').use_diarization, true);
+test('회의 언어별 Azure 언어 설정: 화자 구분은 항상, 여러 언어는 언어 지정 없이', () => {
+  assert.deepEqual(sttDefinition('ko').locales, ['ko-KR']);
+  assert.deepEqual(sttDefinition('vi').locales, ['vi-VN']);
+  assert.deepEqual(sttDefinition('en').locales, ['en-US']);
+  assert.equal(sttDefinition('multi').locales, undefined);
+  assert.equal(sttDefinition('vi').diarization.enabled, true);
 });
 
-test('리턴제로 호출: 토큰 한 번 발급 후 재사용, 결과 변환, 오류 코드 안내', async () => {
+test('Azure 호출: 주소·키·definition 전달, 결과 변환(화자 0부터·시간순), 오류 안내', async () => {
   const { config } = await import('../src/config.js');
-  Object.assign(config, { rtzrClientId: 'id', rtzrClientSecret: 'sec' });
-  const { startTranscribe, getTranscribe } = await import('../src/stt.js');
+  Object.assign(config, { azureSpeechKey: 'k', azureSpeechRegion: 'koreacentral', azureSpeechEndpoint: '' });
+  const { transcribe, sttUrl } = await import('../src/stt.js');
+  assert.equal(sttUrl(), 'https://koreacentral.api.cognitive.microsoft.com/speechtotext/transcriptions:transcribe?api-version=2025-10-15');
   const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
-  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stt-')), 'a.wav'); fs.writeFileSync(f, 'x');
-  const seen = [];
-  const json = (status, body) => ({ ok: status < 400, status, json: async () => body });
-  const fetcher = async (url, opt) => {
-    seen.push(url.replace('https://openapi.vito.ai', ''));
-    if (url.endsWith('/authenticate')) return json(200, { access_token: 'tok', expire_at: Math.floor(Date.now() / 1000) + 6 * 3600 });
-    assert.equal(opt.headers.Authorization, 'Bearer tok');
-    if (opt.method === 'POST') { assert.equal(JSON.parse(opt.body.get('config')).model_name, 'whisper'); return json(200, { id: 'J1' }); }
-    if (url.endsWith('/J1')) return json(200, { id: 'J1', status: 'completed', results: { utterances: [{ start_at: 10, duration: 5, msg: 'xin chào', spk: 0, lang: 'vi' }] } });
-    return json(413, { code: 'H0006', msg: 'too long' });
-  };
-  assert.equal(await startTranscribe(f, 'vi', { fetcher }), 'J1');
-  assert.deepEqual((await getTranscribe('J1', { fetcher })).utterances, [{ t: 10, d: 5, spk: 0, text: 'xin chào', lang: 'vi' }]);
-  await assert.rejects(getTranscribe('J2', { fetcher }), /4시간/);
-  assert.equal(seen.filter(u => u === '/v1/authenticate').length, 1);
+  const f = path.join(fs.mkdtempSync(path.join(os.tmpdir(), 'stt-')), 'a.webm'); fs.writeFileSync(f, 'x');
+  const r = await transcribe(f, 'vi', {
+    poster: async (url, headers, fields, file) => {
+      assert.equal(headers['Ocp-Apim-Subscription-Key'], 'k');
+      assert.deepEqual(JSON.parse(fields.definition).locales, ['vi-VN']);
+      assert.equal(file, f);
+      return { status: 200, body: { durationMilliseconds: 9000, phrases: [
+        { offsetMilliseconds: 5000, durationMilliseconds: 1000, text: 'Vâng.', locale: 'vi-VN', speaker: 2 },
+        { offsetMilliseconds: 100, durationMilliseconds: 2000, text: 'xin chào', locale: 'vi-VN', speaker: 1 },
+        { offsetMilliseconds: 3000, durationMilliseconds: 10, text: ' ', speaker: 1 }
+      ] } };
+    }
+  });
+  assert.deepEqual(r, [{ t: 100, d: 2000, spk: 0, text: 'xin chào', lang: 'vi' }, { t: 5000, d: 1000, spk: 1, text: 'Vâng.', lang: 'vi' }]);
+  await assert.rejects(transcribe(f, 'ko', { poster: async () => ({ status: 401, body: { error: { code: 'Unauthorized' } } }) }), /AZURE_SPEECH_KEY/);
+  await assert.rejects(transcribe(f, 'ko', { poster: async () => ({ status: 400, body: { error: { message: 'Unsupported audio format' } } }) }), /mp3 또는 wav/);
+  await assert.rejects(transcribe(f, 'ko', { poster: async () => ({ status: 429, body: {} }) }), e => e.retry === true);
+});
+
+test('실제 전송 형식(multipart): definition 과 audio 파일이 스트림으로 전달', async () => {
+  const https = await import('node:https'); const { execFileSync } = await import('node:child_process');
+  const fs = await import('node:fs'); const os = await import('node:os'); const path = await import('node:path');
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'stt-'));
+  execFileSync('openssl', ['req', '-x509', '-newkey', 'rsa:2048', '-nodes', '-keyout', path.join(dir, 'k.pem'), '-out', path.join(dir, 'c.pem'), '-days', '1', '-subj', '/CN=localhost'], { stdio: 'ignore' });
+  const audio = path.join(dir, '회의.wav'); fs.writeFileSync(audio, Buffer.alloc(200000, 7));
+  let got;
+  const srv = https.createServer({ key: fs.readFileSync(path.join(dir, 'k.pem')), cert: fs.readFileSync(path.join(dir, 'c.pem')) }, async (req, res) => {
+    const fd = await new Request('http://x', { method: 'POST', headers: req.headers, body: req, duplex: 'half' }).formData();
+    got = { key: req.headers['ocp-apim-subscription-key'], def: JSON.parse(fd.get('definition')), size: fd.get('audio').size, url: req.url };
+    res.setHeader('Content-Type', 'application/json');
+    res.end(JSON.stringify({ phrases: [{ offsetMilliseconds: 0, durationMilliseconds: 500, text: '안녕하세요', locale: 'ko-KR', speaker: 0 }] }));
+  }).listen(0);
+  const { config } = await import('../src/config.js');
+  Object.assign(config, { azureSpeechKey: 'k2', azureSpeechEndpoint: `https://localhost:${srv.address().port}/` });
+  process.env.NODE_TLS_REJECT_UNAUTHORIZED = '0';
+  try {
+    const { transcribe } = await import('../src/stt.js');
+    const r = await transcribe(audio, 'ko');
+    assert.equal(r[0].text, '안녕하세요');
+    assert.equal(got.key, 'k2');
+    assert.equal(got.size, 200000);
+    assert.deepEqual(got.def.locales, ['ko-KR']);
+    assert.match(got.url, /^\/speechtotext\/transcriptions:transcribe\?api-version=/);
+  } finally { delete process.env.NODE_TLS_REJECT_UNAUTHORIZED; srv.close(); Object.assign(config, { azureSpeechEndpoint: '' }); }
 });

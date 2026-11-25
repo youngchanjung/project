@@ -118,7 +118,7 @@ function NewMeeting() {
   return (
     <div className="card" style={{ maxWidth: 880 }}>
       <h3>{tr('새 회의록')} <Link to=".." className="small">{tr('목록으로')}</Link></h3>
-      {caps && !caps.stt && <div className="small" style={{ marginBottom: 8 }}>ⓘ {tr('음성인식(리턴제로) 키가 설정되지 않아 녹음은 파일로만 보관됩니다.')}</div>}
+      {caps && !caps.stt && <div className="small" style={{ marginBottom: 8 }}>ⓘ {tr('음성인식(Azure Speech) 키가 설정되지 않아 녹음은 파일로만 보관됩니다.')}</div>}
       {caps && !caps.ai && <div className="small" style={{ marginBottom: 8 }}>ⓘ {tr('AI 정리(Claude) 키가 설정되지 않아 자동 정리는 꺼져 있습니다.')}</div>}
       {err && <div className="err">{err}</div>}
       <div className="form">

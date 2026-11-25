@@ -1,4 +1,4 @@
-// 회의록: 녹음 올리기 → 음성인식(리턴제로) → AI 정리(Claude) → 작업·이슈로 등록(화면에서)
+// 회의록: 녹음 올리기 → 음성인식(Azure Speech) → AI 정리(Claude) → 작업·이슈로 등록(화면에서)
 import { Router } from 'express';
 import multer from 'multer';
 import fs from 'node:fs';
@@ -8,14 +8,14 @@ import { config } from '../config.js';
 import { ah, HttpError, now, audit, insertId, pick } from '../util.js';
 import { requireLogin } from '../auth.js';
 import { need, loadProject } from './projects.js';
-import { sttEnabled, startTranscribe, getTranscribe, STT_EXT, MEETING_LANGS } from '../stt.js';
+import { sttEnabled, transcribe, STT_EXT, MEETING_LANGS } from '../stt.js';
 import { aiEnabled, summarizeMeeting, transcriptText } from '../minutesAI.js';
 
 // 테스트에서 바꿔 끼울 수 있게 외부 호출을 한곳에 모음
 export const engines = {
   sttEnabled, aiEnabled,
-  start: startTranscribe, get: getTranscribe, summarize: summarizeMeeting,
-  pollMs: Number(process.env.MEETING_POLL_MS || 5000)
+  transcribe, summarize: summarizeMeeting,
+  retryMs: Number(process.env.MEETING_RETRY_MS || 15000)
 };
 
 const BUSY = ['transcribing', 'summarizing'];
@@ -48,44 +48,37 @@ async function update(id, row) {
 }
 
 // ---- 처리 단계 (서버 안에서 백그라운드로) ----
-const polling = new Set();
+const running = new Set();
 
-async function runStt(id) {
-  const m = await db('meetings').where({ id }).first();
-  if (!m?.audio_file) return;
+// 음성인식: 파일을 보내고 결과를 받을 때까지 기다림. 일시적인 오류(네트워크·서버·사용량)는 간격을 늘려 3번까지 다시 시도
+async function runStt(id, tries = 0) {
+  if (running.has(id) && tries === 0) return;
+  running.add(id);
+  let again = false;
   try {
-    const job = await engines.start(audioPath(m), m.language);
-    await update(id, { status: 'transcribing', stt_job_id: job, error: null });
-    schedulePoll(id);
+    const m = await db('meetings').where({ id }).first();
+    if (!m?.audio_file || m.status !== 'transcribing') return;
+    const utterances = await engines.transcribe(audioPath(m), m.language);
+    const cur = await db('meetings').where({ id }).first();
+    if (!cur || cur.status !== 'transcribing' || cur.audio_file !== m.audio_file) return; // 그새 지워졌거나 바뀜
+    const last = utterances.at(-1);
+    await update(id, {
+      status: 'transcribed', error: null, transcript: JSON.stringify(utterances),
+      duration_ms: last ? last.t + last.d : 0
+    });
+    running.delete(id);
+    if (engines.aiEnabled()) await runSummary(id, null);
   } catch (e) {
-    await update(id, { status: 'error', error: e.message });
-  }
-}
-
-function schedulePoll(id, delay = engines.pollMs, fails = 0) {
-  polling.add(id);
-  setTimeout(async () => {
-    let m;
-    try {
-      m = await db('meetings').where({ id }).first();
-      if (!m || m.status !== 'transcribing' || !m.stt_job_id) { polling.delete(id); return; }
-      const r = await engines.get(m.stt_job_id);
-      if (r.status === 'transcribing') return schedulePoll(id, engines.pollMs, 0);
-      polling.delete(id);
-      if (r.status === 'failed') return update(id, { status: 'error', error: r.error || '음성인식에 실패했습니다.' });
-      const last = r.utterances.at(-1);
-      await update(id, {
-        status: 'transcribed', error: null, transcript: JSON.stringify(r.utterances),
-        duration_ms: last ? last.t + last.d : 0
-      });
-      if (engines.aiEnabled()) await runSummary(id, null);
-    } catch (e) {
-      // 일시적인 오류(네트워크·서버)는 간격을 늘려 다시 조회, 5번 연속 실패하면 중단
-      if (fails < 5 && (e.retry || !e.status)) return schedulePoll(id, Math.min(engines.pollMs * 2 ** (fails + 1), 300e3), fails + 1);
-      polling.delete(id);
-      await update(id, { status: 'error', error: e.message }).catch(() => {});
+    if (tries < 3 && (e.retry || !e.status)) {
+      again = true;
+      setTimeout(() => runStt(id, tries + 1), engines.retryMs * 2 ** tries).unref?.();
+      return;
     }
-  }, delay).unref?.();
+    console.error('회의 음성인식 실패', id, e.message);
+    await update(id, { status: 'error', error: e.message }).catch(() => {});
+  } finally {
+    if (!again) running.delete(id);
+  }
 }
 
 async function runSummary(id, lang) {
@@ -108,9 +101,9 @@ async function runSummary(id, lang) {
 
 // 서버가 다시 시작되면 진행 중이던 음성인식·정리를 이어서
 export async function resumeMeetings() {
-  const rows = await db('meetings').whereIn('status', BUSY).select('id', 'status', 'stt_job_id');
+  const rows = await db('meetings').whereIn('status', BUSY).select('id', 'status');
   for (const r of rows) {
-    if (r.status === 'transcribing' && r.stt_job_id) schedulePoll(r.id, 1000);
+    if (r.status === 'transcribing') runStt(r.id); // 끊긴 요청은 처음부터 다시 보냄
     else if (r.status === 'summarizing') runSummary(r.id, null);
   }
 }
@@ -222,10 +215,10 @@ meetingsRouter.post('/:mid/transcribe', ah(async (req, res) => {
   const pid = Number(req.params.pid);
   await need(req, pid);
   const m = await loadMeeting(req);
-  if (!engines.sttEnabled()) throw new HttpError(503, '음성인식 기능이 꺼져 있습니다. 관리자에게 리턴제로 API 키 설정을 요청하세요.');
+  if (!engines.sttEnabled()) throw new HttpError(503, '음성인식 기능이 꺼져 있습니다. 관리자에게 Azure Speech 키 설정을 요청하세요.');
   if (!m.audio_file) throw new HttpError(400, '녹음 파일이 없는 회의록입니다.');
   if (BUSY.includes(m.status)) throw new HttpError(409, '이미 처리 중입니다. 잠시 기다려 주세요.');
-  await update(m.id, { status: 'transcribing', stt_job_id: null, error: null });
+  await update(m.id, { status: 'transcribing', error: null });
   runStt(m.id);
   res.json({ ok: true, status: 'transcribing' });
 }));

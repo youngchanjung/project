@@ -735,11 +735,11 @@
   "유형은 {0} 중 하나입니다.": "Loại phải là một trong {0}.",
   "을 누릅니다. 같은 아이디는 정보를 갱신합니다.": "để đăng ký. Tên đăng nhập đã có sẽ được cập nhật.",
   "음성을 글로 바꾸는 중입니다. 회의 길이에 따라 몇 분에서 수십 분 걸리며, 다른 화면으로 이동해도 계속 진행됩니다.": "Đang chuyển giọng nói thành văn bản. Tùy độ dài cuộc họp, quá trình này mất từ vài phút đến vài chục phút và vẫn tiếp tục khi bạn chuyển sang màn hình khác.",
-  "음성인식 기능이 꺼져 있습니다. 관리자에게 리턴제로 API 키 설정을 요청하세요.": "Tính năng nhận dạng giọng nói đang tắt. Vui lòng yêu cầu quản trị viên thiết lập khóa API Return Zero.",
+  "음성인식 기능이 꺼져 있습니다. 관리자에게 Azure Speech 키 설정을 요청하세요.": "Tính năng nhận dạng giọng nói đang tắt. Vui lòng yêu cầu quản trị viên thiết lập khóa Azure Speech.",
   "음성인식 다시 하기": "Nhận dạng giọng nói lại",
   "음성인식 시작": "Bắt đầu nhận dạng giọng nói",
   "음성인식 중": "Đang nhận dạng giọng nói",
-  "음성인식(리턴제로) 키가 설정되지 않아 녹음은 파일로만 보관됩니다.": "Chưa thiết lập khóa nhận dạng giọng nói (Return Zero) nên bản ghi âm chỉ được lưu dưới dạng tệp.",
+  "음성인식(Azure Speech) 키가 설정되지 않아 녹음은 파일로만 보관됩니다.": "Chưa thiết lập khóa nhận dạng giọng nói (Azure Speech) nên bản ghi âm chỉ được lưu dưới dạng tệp.",
   "음성인식을 다시 할까요? 지금 전사본은 새 결과로 바뀝니다.": "Nhận dạng giọng nói lại? Bản chép lời hiện tại sẽ được thay bằng kết quả mới.",
   "의견 (반려 사유 등, 선택)": "Ý kiến (lý do từ chối, v.v., không bắt buộc)",
   "이 기간에 기록한 시간이 없습니다. 카드를 열어 ‘시간 기록’ 탭에서 입력합니다.": "Chưa ghi giờ trong khoảng này. Mở thẻ và nhập ở tab ‘Ghi giờ’.",
@@ -1134,5 +1134,6 @@
   "휴대폰에서 열면 ‘사진 찍기’로 바로 촬영해 올릴 수 있습니다. 작업이나 이슈 창의 ‘사진 · 첨부’에서 올린 것도 여기에 모입니다.": "Trên điện thoại, ‘Chụp ảnh’ cho phép chụp và tải lên ngay. Ảnh thêm ở mục ‘Ảnh · tệp đính kèm’ trong cửa sổ công việc và vấn đề cũng hiện ở đây.",
   "휴일 달력": "Lịch ngày lễ",
   "휴일 달력 국가는 {0} 중에서 고르세요.": "Hãy chọn quốc gia lịch ngày lễ trong số {0}.",
-  "휴일 달력 국가를 고르세요.": "Hãy chọn quốc gia lịch ngày lễ."
+  "휴일 달력 국가를 고르세요.": "Hãy chọn quốc gia lịch ngày lễ.",
+  "음성인식 응답이 너무 오래 걸려 중단했습니다.": "Nhận dạng giọng nói phản hồi quá lâu nên đã bị dừng."
 }

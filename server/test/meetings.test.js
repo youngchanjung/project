@@ -9,7 +9,7 @@ const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'sched-meet-'));
 process.env.DB_CLIENT = 'sqlite';
 process.env.DATA_DIR = tmp;
 process.env.SESSION_SECRET = 'test';
-process.env.MEETING_POLL_MS = '20';
+process.env.MEETING_RETRY_MS = '20';
 
 let server, base, cookie = '', engines, pid;
 async function call(method, url, body) {
@@ -50,11 +50,15 @@ after(async () => {
 
 test('녹음 업로드 → 음성인식 → AI 정리가 자동으로 이어지고, 화자 이름이 정리에 반영된다', async () => {
   const calls = [];
-  let polls = 0;
+  let tries = 0;
   Object.assign(engines, {
     sttEnabled: () => true, aiEnabled: () => true,
-    start: async (file, lang) => { calls.push(['start', path.basename(file), lang, fs.existsSync(file)]); return 'job-1'; },
-    get: async id => (++polls < 2 ? { status: 'transcribing' } : { status: 'completed', utterances: [{ t: 0, d: 1500, spk: 0, text: '다음 주 금요일까지 시험 보고서 제출합시다.' }, { t: 2000, d: 1000, spk: 1, text: '네, 제가 하겠습니다.' }] }),
+    transcribe: async (file, lang) => {
+      calls.push(['start', path.basename(file), lang, fs.existsSync(file)]);
+      // 첫 시도는 일시 오류(429) → 자동으로 다시 시도
+      if (++tries === 1) throw Object.assign(new Error('한도'), { status: 502, retry: true });
+      return [{ t: 0, d: 1500, spk: 0, text: '다음 주 금요일까지 시험 보고서 제출합시다.' }, { t: 2000, d: 1000, spk: 1, text: '네, 제가 하겠습니다.' }];
+    },
     summarize: async input => { calls.push(['sum', input.transcript, input.outLang]); return { summary: '보고서 제출 합의', topics: [], decisions: ['보고서 제출'], action_items: [{ task: '시험 보고서 제출', owner: '김', due: '2026-11-27' }], issues: [], next_meeting: '', _lang: input.outLang }; }
   });
   const r = await call('POST', `/projects/${pid}/meetings`, audioForm('주간회의 녹음.wav', { title: '주간 회의', held_at: '2026-11-20T10:00', attendees: '김, 이', language: 'ko' }));
@@ -67,6 +71,8 @@ test('녹음 업로드 → 음성인식 → AI 정리가 자동으로 이어지�
   assert.equal(done.duration_ms, 3000);
   assert.equal(done.summary.action_items[0].due, '2026-11-27');
   assert.deepEqual(calls[0], ['start', `${id}.wav`, 'ko', true]);
+  assert.equal(tries, 2);
+  calls.shift();
   assert.match(calls[1][1], /\[00:00:00\] 화자1: 다음 주/);
 
   // 화자 이름 지정 후 다시 정리 (베트남어로)
@@ -86,7 +92,7 @@ test('녹음 업로드 → 음성인식 → AI 정리가 자동으로 이어지�
 
 test('메모만 있는 회의록도 정리할 수 있고, 형식이 안 맞는 파일·빈 제목은 거부', async () => {
   Object.assign(engines, { sttEnabled: () => false, aiEnabled: () => false });
-  assert.equal((await call('POST', `/projects/${pid}/meetings`, audioForm('a.webm', { title: 'x' }))).status, 400);
+  assert.equal((await call('POST', `/projects/${pid}/meetings`, audioForm('a.txt', { title: 'x' }))).status, 400);
   assert.equal((await call('POST', `/projects/${pid}/meetings`, audioForm(null, { title: ' ' }))).status, 400);
   const m = (await call('POST', `/projects/${pid}/meetings`, audioForm(null, { title: '메모 회의', notes: '설계 검토 완료' }))).body;
   assert.equal(m.status, 'draft');
@@ -113,10 +119,9 @@ test('메모만 있는 회의록도 정리할 수 있고, 형식이 안 맞는 �
 test('음성인식 실패는 오류 상태와 메시지로 남는다', async () => {
   Object.assign(engines, {
     sttEnabled: () => true, aiEnabled: () => false,
-    start: async () => 'job-2',
-    get: async () => ({ status: 'failed', error: '음성인식에 실패했습니다.' })
+    transcribe: async () => { throw Object.assign(new Error('Azure Speech 인증에 실패했습니다.'), { status: 502, retry: false }); }
   });
   const m = (await call('POST', `/projects/${pid}/meetings`, audioForm('c.mp3', { title: '실패' }))).body;
   const x = await wait(async () => { const r = (await call('GET', `/projects/${pid}/meetings/${m.id}`)).body; return r.status === 'error' && r; });
-  assert.match(x.error, /실패/);
+  assert.match(x.error, /인증에 실패/);
 });
