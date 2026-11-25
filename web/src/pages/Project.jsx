@@ -18,6 +18,8 @@ import Lookahead from '../views/Lookahead.jsx';
 import Workload from '../views/Workload.jsx';
 import Plan from '../views/Plan.jsx';
 import Progress from '../views/Progress.jsx';
+import SCurve from '../views/SCurve.jsx';
+import Photos from '../views/Photos.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
 import { tr } from '../i18n.js';
@@ -88,7 +90,7 @@ export default function Project() {
   const cat = catOf(p.category);
   const isCons = cat.key === 'construction';
   const NAMES = {
-    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), progress: tr('진척 입력'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), progress: tr('진척 입력'), scurve: tr('공정률'), photos: tr('현장 사진'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
     board: tr('칸반'), workload: tr('업무량'), plan: tr('배치 달력'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
   // 외부 협력자: 자기 카드 관련 화면만
@@ -122,6 +124,8 @@ export default function Project() {
           <Route path="gantt" element={<Gantt />} />
           <Route path="lookahead" element={<Lookahead />} />
           <Route path="progress" element={<Progress />} />
+          <Route path="scurve" element={<SCurve />} />
+          <Route path="photos" element={<Photos />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />
           <Route path="issues" element={<Issues />} />

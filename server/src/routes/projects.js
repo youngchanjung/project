@@ -3,7 +3,10 @@ import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate } from '../util.js';
 import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
 import { normCalendars } from '../countries.js';
-import { stateOf, criticalPath } from '../schedule.js';
+import { stateOf, criticalPath, sCurve } from '../schedule.js';
+import fs from 'node:fs';
+import path from 'node:path';
+import { config } from '../config.js';
 import { insertDefaultColumns } from '../migrations.js';
 import { TASK_STATUS, TASK_TYPES, TASK_PRIORITY } from './tasks.js';
 
@@ -253,10 +256,12 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
     await trx('baseline_tasks').whereIn('baseline_id', trx('baselines').select('id').where({ project_id: id })).del();
     await trx('baselines').where({ project_id: id }).del();
     await trx('timeline_events').where({ project_id: id }).del();
+    await trx('attachments').where({ project_id: id }).del();
     for (const t of ['time_entries', 'meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
   });
+  fs.rmSync(path.join(config.attachDir, String(id)), { recursive: true, force: true }); // 현장 사진·첨부 파일
   res.json({ ok: true });
 }));
 
@@ -393,6 +398,27 @@ projectsRouter.post('/:id/baselines', ah(async (req, res) => {
     return { id: bid, name, count: ts.length };
   });
   res.json(out);
+}));
+
+// 공정률·S-커브. ?baseline=<기준선 id> (없으면 기준 시작·종료), ?mode=duration|weight, ?today=YYYY-MM-DD
+projectsRouter.get('/:id/scurve', ah(async (req, res) => {
+  const id = Number(req.params.id);
+  await loadProject(id);
+  if (!(await projectRole(req.user, id))) throw new HttpError(403, '참여하지 않은 프로젝트입니다.');
+  let tasks = await db('tasks').where({ project_id: id });
+  if (req.user.external) tasks = tasks.filter(t => t.assignee_id === req.user.id || t.reviewer_id === req.user.id);
+  tasks = tasks.map(t => ({ ...t, undated: !!t.undated }));
+  let plan = null;
+  const bid = Number(req.query.baseline) || 0;
+  if (bid) {
+    const b = await db('baselines').where({ id: bid, project_id: id }).first();
+    if (!b) throw new HttpError(404, '기준선을 찾을 수 없습니다.');
+    plan = new Map((await db('baseline_tasks').where({ baseline_id: bid })).map(r => [r.task_id, r]));
+  }
+  const hasWeight = tasks.some(t => Number(t.weight) > 0);
+  const mode = req.query.mode === 'weight' && hasWeight ? 'weight' : 'duration';
+  const today = /^\d{4}-\d{2}-\d{2}$/.test(req.query.today || '') ? req.query.today : new Date().toISOString().slice(0, 10);
+  res.json({ ...sCurve(tasks, { today, plan, mode }), hasWeight });
 }));
 
 projectsRouter.get('/:id/baselines/:bid', ah(async (req, res) => {

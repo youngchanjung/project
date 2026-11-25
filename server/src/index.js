@@ -21,6 +21,7 @@ import { workloadRouter } from './routes/workload.js';
 import { timeRouter, leavesRouter } from './routes/design.js';
 import { tasksRouter, depsRouter } from './routes/tasks.js';
 import { issuesRouter } from './routes/issues.js';
+import { attachmentsRouter } from './routes/attachments.js';
 import { meetingsRouter, meetingStatusRouter, resumeMeetings } from './routes/meetings.js';
 import { importRouter, exportRouter, holidaysRouter, meRouter } from './routes/data.js';
 
@@ -61,6 +62,7 @@ export function createApp() {
   api.use('/projects/:pid/tasks', tasksRouter);
   api.use('/projects/:pid/deps', depsRouter);
   api.use('/projects/:pid/issues', issuesRouter);
+  api.use('/projects/:pid/attachments', attachmentsRouter);
   api.use('/meetings', meetingStatusRouter);
   api.use('/projects/:pid/meetings', meetingsRouter);
   api.use('/projects/:pid/import', importRouter);

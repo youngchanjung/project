@@ -23,7 +23,7 @@ export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
 const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
   'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
-  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade', 'deadline', 'actual_start', 'parent_id', 'est_hours'];
+  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade', 'deadline', 'actual_start', 'parent_id', 'est_hours', 'weight'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ymd = () => new Date().toISOString().slice(0, 10);
 
@@ -64,6 +64,11 @@ function clean(body, partial) {
     const h = t.est_hours === '' || t.est_hours === null ? null : Number(t.est_hours);
     if (h !== null && !(h >= 0 && h <= 2000)) throw new HttpError(400, '예상 시간은 0~2000 사이 숫자로 입력하세요.');
     t.est_hours = h ? Math.round(h * 10) / 10 : null;
+  }
+  if (t.weight !== undefined) {
+    const w = t.weight === '' || t.weight === null ? null : Number(t.weight);
+    if (w !== null && !(w >= 0 && w < 1e13)) throw new HttpError(400, '공정 가중치는 0 이상의 숫자로 입력하세요.');
+    t.weight = w || null;
   }
   if (t.progress !== undefined) t.progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
   if (t.company !== undefined) t.company = String(t.company || '').trim().slice(0, 120) || null;
@@ -190,6 +195,7 @@ tasksRouter.delete('/:tid', ah(async (req, res) => {
     await trx('tasks').where({ parent_id: tid }).update({ parent_id: t.parent_id ?? null }); // 하위 작업은 한 단계 위로
     await trx('issues').where({ task_id: tid }).update({ task_id: null });
     await trx('time_entries').where({ task_id: tid }).update({ task_id: null }); // 기록한 시간은 남김
+    await trx('attachments').where({ task_id: tid }).update({ task_id: null }); // 현장 사진은 남김
     await trx('task_checklist').where({ task_id: tid }).del();
     await trx('tasks').where({ id: tid }).del();
     await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'delete', label: t.name, changes: { start: [t.start, null], end: [t.end, null] } });
