@@ -95,3 +95,45 @@ test('카테고리 검사, 기본값 시공, 열 추가·삭제', async () => {
   const r = await call('PATCH', `/projects/${p.id}`, { category: 'research' });
   assert.equal(r.body.category, 'research');
 });
+
+test('검토 흐름: 검토 열로 옮기면 검토자에게 알림, 승인하면 완료 열, 반려하면 진행 중 열', async () => {
+  const me = (await call('GET', '/auth/me')).body.user;
+  // 검토자 계정
+  const rv = (await call('POST', '/users', { username: 'rev1', name: '검토자', password: 'rev12345' })).body;
+  const p = (await call('POST', '/projects', { name: '설계 C', category: 'design' })).body;
+  await call('PUT', `/projects/${p.id}/members/${rv.id}`, { role: 'member' });
+  const d = (await call('GET', `/projects/${p.id}/data`)).body;
+  const [todo, doing, review, done] = d.columns;
+  const t = (await call('POST', `/projects/${p.id}/tasks`, { name: '창호도', board_column_id: todo.id, reviewer_id: rv.id, assignee_id: me.id })).body.task;
+  let r = await call('POST', `/projects/${p.id}/tasks/${t.id}/move`, { column_id: review.id });
+  assert.equal(r.body.task.review_state, 'requested');
+  const { db } = await import('../src/db.js');
+  assert.equal((await db('notifications').where({ user_id: rv.id, kind: 'review_requested' })).length, 1);
+  // 반려 → 진행 중
+  r = await call('POST', `/projects/${p.id}/tasks/${t.id}/review`, { decision: 'reject', note: '치수 누락' });
+  assert.equal(r.status, 200);
+  assert.equal(r.body.task.board_column_id, doing.id);
+  assert.equal(r.body.task.review_state, 'rejected');
+  assert.equal(r.body.task.review_note, '치수 누락');
+  // 다시 검토 → 승인 → 완료
+  await call('POST', `/projects/${p.id}/tasks/${t.id}/move`, { column_id: review.id });
+  r = await call('POST', `/projects/${p.id}/tasks/${t.id}/review`, { decision: 'approve' });
+  assert.equal(r.body.task.board_column_id, done.id);
+  assert.equal(r.body.task.status, '완료');
+  assert.equal(r.body.task.review_state, 'approved');
+});
+
+test('연구 프로젝트: 협약 기간으로 예시 일정, 회의 시각·참석자 검사', async () => {
+  const p = (await call('POST', '/projects', { name: '연구 D', category: 'research', agreement_start: '2027-01-01', agreement_end: '2027-12-31', template: true })).body;
+  assert.equal(p.agreement_end, '2027-12-31');
+  const d = (await call('GET', `/projects/${p.id}/data`)).body;
+  const byName = Object.fromEntries(d.tasks.map(t => [t.name, t]));
+  assert.equal(byName['착수 회의'].start, '2027-01-01');
+  assert.equal(byName['최종 보고서 제출'].end, '2027-12-31');
+  assert.equal(byName['중간 보고서 제출'].type, '마일스톤');
+  assert.equal((await call('POST', `/projects/${p.id}/tasks`, { name: '주간 회의', type: '회의', start: '2027-01-05', start_time: '25:00' })).status, 400);
+  const m = (await call('POST', `/projects/${p.id}/tasks`, { name: '주간 회의', type: '회의', start: '2027-01-05', start_time: '14:00', end_time: '15:00', location: '3층 회의실', attendees: [1] })).body.task;
+  assert.equal(m.start_time, '14:00');
+  assert.equal(m.attendees, '1');
+  assert.equal((await call('POST', '/projects', { name: 'X', category: 'research', agreement_start: '2027-02-01', agreement_end: '2027-01-01' })).status, 400);
+});

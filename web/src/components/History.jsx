@@ -11,7 +11,7 @@ export const FIELD = {
   party: '책임기관', priority: '중요도', category: '구분', task_id: '관련 작업', remark: '비고', source: '출처', lag: '지연일', kind: '관계',
   calendars: '휴일 달력', day_basis: '계산 기준', description: '설명', client: '발주처', archived: '보관'
 };
-const ACTION = { create: '추가', update: '수정', delete: '삭제', auto: '자동 조정', import: '엑셀 불러오기', baseline: '기준 일정', comment: '댓글', move: '칸반 이동', checklist: '체크리스트' };
+const ACTION = { create: '추가', update: '수정', delete: '삭제', auto: '자동 조정', import: '엑셀 불러오기', baseline: '기준 일정', comment: '댓글', move: '칸반 이동', checklist: '체크리스트', approve: '승인', reject: '반려' };
 const short = v => v === null || v === undefined || v === '' ? tr('(없음)') : String(v).length > 40 ? String(v).slice(0, 40) + '…' : String(v);
 
 export default function History({ entity, entityId }) {

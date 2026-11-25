@@ -5,6 +5,7 @@ import { useApp, rememberProject } from '../App.jsx';
 import Dropdown from '../components/Dropdown.jsx';
 import { today, stateOf, phaseColor, ROLE_NAME, PALETTE, catOf } from '../util.js';
 import Board from '../views/Board.jsx';
+import Schedule from '../views/Schedule.jsx';
 import Dashboard from '../views/Dashboard.jsx';
 import Gantt from '../views/Gantt.jsx';
 import Calendar from '../views/Calendar.jsx';
@@ -67,7 +68,7 @@ export default function Project() {
   const cat = catOf(p.category);
   const isCons = cat.key === 'construction';
   const NAMES = {
-    dashboard: tr('대시보드'), gantt: tr('간트'), calendar: tr(cat.key === 'research' ? '일정' : '달력'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
+    dashboard: tr('대시보드'), gantt: tr('간트'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
     board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
   const tabs = cat.tabs.map(k => [k, NAMES[k]]);
@@ -92,6 +93,7 @@ export default function Project() {
           <Route index element={<Navigate to={`/projects/${id}/${cat.view}${location.search}`} replace />} />
           <Route path="dashboard" element={<><FilterBar /><Dashboard /></>} />
           <Route path="board" element={<Board />} />
+          <Route path="schedule" element={<Schedule />} />
           <Route path="gantt" element={<Gantt />} />
           <Route path="calendar" element={<><FilterBar /><Calendar /></>} />
           <Route path="tasks" element={<><FilterBar /><TaskList /></>} />

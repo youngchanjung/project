@@ -9,12 +9,13 @@ import { notify, recipientsOf } from '../notify.js';
 export const tasksRouter = Router({ mergeParams: true });
 tasksRouter.use(requireLogin);
 
-export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의'];
+export const TASK_TYPES = ['작업', '마일스톤', '제출', '지급', '검토', '홀드포인트', '회의', '시험'];
 export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
 const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
   'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
-  'board_column_id', 'priority', 'tags', 'reviewer_id'];
+  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url'];
+const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ymd = () => new Date().toISOString().slice(0, 10);
 
 function clean(body, partial) {
@@ -43,6 +44,12 @@ function clean(body, partial) {
   if (t.status !== undefined && !TASK_STATUS.includes(t.status)) throw new HttpError(400, `상태는 ${TASK_STATUS.join('/')} 중 하나입니다.`);
   if (t.is_key !== undefined) t.is_key = !!t.is_key;
   if (t.priority !== undefined && !TASK_PRIORITY.includes(t.priority)) throw new HttpError(400, `우선순위는 ${TASK_PRIORITY.join('/')} 중 하나입니다.`);
+  for (const f of ['start_time', 'end_time']) if (t[f] !== undefined) {
+    t[f] = t[f] ? String(t[f]).slice(0, 5) : null;
+    if (t[f] && !HHMM.test(t[f])) throw new HttpError(400, '시각은 00:00~23:59 형식으로 입력하세요.');
+  }
+  if (t.attendees !== undefined) t.attendees = (Array.isArray(t.attendees) ? t.attendees : String(t.attendees || '').split(',')).map(Number).filter(Boolean).join(',') || null;
+  if (t.meeting_url !== undefined && t.meeting_url && !/^https?:\/\//i.test(t.meeting_url)) throw new HttpError(400, '회의 링크는 http(s):// 로 시작해야 합니다.');
   if (t.tags !== undefined) t.tags = String(t.tags || '').split(',').map(x => x.trim()).filter(Boolean).join(', ') || null;
   if (t.progress !== undefined) t.progress = Math.max(0, Math.min(100, Number(t.progress) || 0));
   for (const f of ['phase_id', 'assignee_id', 'board_column_id', 'reviewer_id']) if (t[f] !== undefined) t[f] = t[f] ? Number(t[f]) : null;
@@ -93,6 +100,8 @@ tasksRouter.post('/', ah(async (req, res) => {
     const id = await insertId(trx, 'tasks', { ...t, project_id: pid, created_at: now(), updated_at: now(), updated_by: req.user.id });
     await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: id, action: 'create', label: t.name });
     await notify(trx, await recipientsOf(trx, t), { kind: 'task_assigned', projectId: pid, entity: 'task', entityId: id, actorId: req.user.id, params: { name: t.name, code: t.code, by: req.user.name } });
+    if (t.type === '회의' && t.attendees) await notify(trx, t.attendees.split(',').map(Number), { kind: 'meeting_invited', projectId: pid, entity: 'task', entityId: id, actorId: req.user.id,
+      params: { name: t.name, date: t.undated ? null : t.start, time: t.start_time, location: t.location, by: req.user.name } });
     return { id };
   });
   res.json({ task: await db('tasks').where({ id: result.id }).first(), shifted: [] });
@@ -126,6 +135,12 @@ tasksRouter.patch('/:tid', ah(async (req, res) => {
     const oldR = new Set(await recipientsOf(trx, before)), newR = await recipientsOf(trx, after);
     const base = { projectId: pid, entity: 'task', entityId: tid, actorId: req.user.id };
     await notify(trx, newR.filter(u => !oldR.has(u)), { ...base, kind: 'task_assigned', params: { name: after.name, code: after.code, by: req.user.name } });
+    if (after.type === '회의') {
+      const oldA = new Set(String(before.attendees || '').split(',').map(Number)), newA = String(after.attendees || '').split(',').map(Number).filter(Boolean);
+      const mp = { name: after.name, date: after.undated ? null : after.start, time: after.start_time, location: after.location, by: req.user.name };
+      await notify(trx, newA.filter(u => !oldA.has(u)), { ...base, kind: 'meeting_invited', params: mp });
+      if (ch.start || ch.start_time || ch.location) await notify(trx, newA.filter(u => oldA.has(u)), { ...base, kind: 'meeting_changed', params: mp });
+    }
     if (ch.start || ch.end) await notify(trx, newR.filter(u => oldR.has(u)), { ...base, kind: 'task_changed', params: { name: after.name, code: after.code, from: `${before.start}~${before.end}`, to: `${after.start}~${after.end}`, by: req.user.name } });
     if (ch.start || ch.end || ch.status || ch.not_before) return applyRecalc(trx, pid, req.user);
     return [];
@@ -149,41 +164,74 @@ tasksRouter.delete('/:tid', ah(async (req, res) => {
 }));
 
 // ---- 칸반: 카드 이동 { column_id, index } → 열·순서·상태를 한 번에 바꿈 ----
+// 검토 열로 들어가면 검토자(없으면 PM)에게 검토 요청 알림
+export async function moveTask(trx, pid, tid, colId, index, user, extra = {}) {
+  const t = await trx('tasks').where({ id: tid, project_id: pid }).first();
+  if (!t) throw new HttpError(404, '작업이 없습니다.');
+  const cols = await trx('board_columns').where({ project_id: pid }).orderBy('sort');
+  const col = cols.find(c => c.id === colId);
+  if (!col) throw new HttpError(400, '칸반 열이 이 프로젝트에 없습니다.');
+  // 이 열에 보이는 카드 순서 (열이 지정 안 된 카드는 상태가 같은 첫 열에 보임)
+  const all = await trx('tasks').where({ project_id: pid }).whereNot({ id: tid });
+  const colOf = x => (x.board_column_id && cols.some(c => c.id === x.board_column_id)) ? x.board_column_id
+    : (cols.find(c => c.status === x.status)?.id ?? cols[0].id);
+  const inCol = all.filter(x => colOf(x) === colId).sort((a, b) => a.board_order - b.board_order || a.id - b.id);
+  const idx = Math.max(0, Math.min(inCol.length, Number.isFinite(Number(index)) && index !== null ? Number(index) : inCol.length));
+  inCol.splice(idx, 0, t);
+  for (const [i, x] of inCol.entries()) {
+    if (x.id === tid) continue;
+    if (x.board_order !== i || x.board_column_id !== colId) await trx('tasks').where({ id: x.id }).update({ board_order: i, board_column_id: colId });
+  }
+  const up = { board_column_id: colId, board_order: idx, ...extra };
+  if (t.status !== col.status) {
+    up.status = col.status;
+    if (col.status === '완료') { up.actual_end = t.actual_end || ymd(); up.progress = 100; }
+    else if (t.status === '완료') up.actual_end = null;
+  }
+  const fromCol = cols.find(c => c.id === colOf(t));
+  const enteringReview = col.is_review && !fromCol?.is_review;
+  if (enteringReview && extra.review_state === undefined) up.review_state = 'requested';
+  else if (fromCol?.is_review && !col.is_review && extra.review_state === undefined && t.review_state === 'requested') up.review_state = null; // 검토 열에서 끌어 뺌
+  await trx('tasks').where({ id: tid }).update({ ...up, version: t.version + 1, updated_at: now(), updated_by: user.id });
+  if (t.board_column_id !== colId || up.status) {
+    await audit(trx, { user, projectId: pid, entity: 'task', entityId: tid, action: 'move', label: `${t.name}: ${fromCol?.name || ''} → ${col.name}`, changes: up.status ? { status: [t.status, up.status] } : null });
+  }
+  if (enteringReview && extra.review_state === undefined) {
+    const to = t.reviewer_id ? [t.reviewer_id]
+      : (await trx('project_members').where({ project_id: pid, role: 'pm' }).select('user_id')).map(r => r.user_id);
+    await notify(trx, to, { kind: 'review_requested', projectId: pid, entity: 'task', entityId: tid, actorId: user.id, params: { name: t.name, code: t.code, by: user.name } });
+  }
+  return up.status ? applyRecalc(trx, pid, user) : [];
+}
 tasksRouter.post('/:tid/move', ah(async (req, res) => {
   const pid = Number(req.params.pid), tid = Number(req.params.tid);
   await need(req, pid);
-  const colId = Number(req.body?.column_id);
-  const out = await db.transaction(async trx => {
+  const shifted = await db.transaction(trx => moveTask(trx, pid, tid, Number(req.body?.column_id), req.body?.index, req.user));
+  res.json({ task: await db('tasks').where({ id: tid }).first(), shifted });
+}));
+
+// ---- 검토: 승인하면 완료 열로, 반려하면 진행 중 열로. 검토자 또는 PM 만 ----
+tasksRouter.post('/:tid/review', ah(async (req, res) => {
+  const pid = Number(req.params.pid), tid = Number(req.params.tid);
+  const role = await need(req, pid);
+  const decision = req.body?.decision;
+  if (!['approve', 'reject'].includes(decision)) throw new HttpError(400, '승인 또는 반려를 고르세요.');
+  const note = String(req.body?.note || '').trim().slice(0, 1000) || null;
+  const shifted = await db.transaction(async trx => {
     const t = await trx('tasks').where({ id: tid, project_id: pid }).first();
     if (!t) throw new HttpError(404, '작업이 없습니다.');
+    if (t.reviewer_id !== req.user.id && role !== 'pm') throw new HttpError(403, '검토자 또는 PM만 승인·반려할 수 있습니다.');
     const cols = await trx('board_columns').where({ project_id: pid }).orderBy('sort');
-    const col = cols.find(c => c.id === colId);
-    if (!col) throw new HttpError(400, '칸반 열이 이 프로젝트에 없습니다.');
-    // 이 열에 보이는 카드 순서 (열이 지정 안 된 카드는 상태가 같은 첫 열에 보임)
-    const all = await trx('tasks').where({ project_id: pid }).whereNot({ id: tid });
-    const colOf = x => (x.board_column_id && cols.some(c => c.id === x.board_column_id)) ? x.board_column_id
-      : (cols.find(c => c.status === x.status)?.id ?? cols[0].id);
-    const inCol = all.filter(x => colOf(x) === colId).sort((a, b) => a.board_order - b.board_order || a.id - b.id);
-    const idx = Math.max(0, Math.min(inCol.length, Number.isFinite(Number(req.body?.index)) ? Number(req.body.index) : inCol.length));
-    inCol.splice(idx, 0, t);
-    for (const [i, x] of inCol.entries()) {
-      if (x.id === tid) continue;
-      if (x.board_order !== i || x.board_column_id !== colId) await trx('tasks').where({ id: x.id }).update({ board_order: i, board_column_id: colId });
-    }
-    const up = { board_column_id: colId, board_order: idx };
-    if (t.status !== col.status) {
-      up.status = col.status;
-      if (col.status === '완료') { up.actual_end = t.actual_end || ymd(); up.progress = 100; }
-      else if (t.status === '완료') up.actual_end = null;
-    }
-    await trx('tasks').where({ id: tid }).update({ ...up, version: t.version + 1, updated_at: now(), updated_by: req.user.id });
-    if (t.board_column_id !== colId || up.status) {
-      const fromCol = cols.find(c => c.id === colOf(t));
-      await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: 'move', label: `${t.name}: ${fromCol?.name || ''} → ${col.name}`, changes: up.status ? { status: [t.status, up.status] } : null });
-    }
-    return up.status ? await applyRecalc(trx, pid, req.user) : [];
+    const target = decision === 'approve'
+      ? cols.find(c => c.status === '완료')
+      : (cols.find(c => c.status === '진행중' && !c.is_review) || cols.find(c => !c.is_review && c.status !== '완료'));
+    if (!target) throw new HttpError(400, decision === 'approve' ? '완료 상태의 칸반 열이 없습니다.' : '되돌릴 칸반 열이 없습니다.');
+    const out = await moveTask(trx, pid, tid, target.id, 0, req.user, { review_state: decision === 'approve' ? 'approved' : 'rejected', review_note: note });
+    await audit(trx, { user: req.user, projectId: pid, entity: 'task', entityId: tid, action: decision === 'approve' ? 'approve' : 'reject', label: `${t.name}${note ? `: ${note}` : ''}` });
+    await notify(trx, await recipientsOf(trx, t), { kind: decision === 'approve' ? 'review_approved' : 'review_rejected', projectId: pid, entity: 'task', entityId: tid, actorId: req.user.id, params: { name: t.name, code: t.code, by: req.user.name, note } });
+    return out;
   });
-  res.json({ task: await db('tasks').where({ id: tid }).first(), shifted: out });
+  res.json({ task: await db('tasks').where({ id: tid }).first(), shifted });
 }));
 
 // ---- 체크리스트 ----

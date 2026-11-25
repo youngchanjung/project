@@ -35,7 +35,8 @@ function Info() {
   const set = k => e => setF({ ...f, [k]: e.target.value });
   const ed = can('pm');
   const save = async patch => {
-    try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis, category: f.category }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
+    try { await api.patch(`/projects/${project.id}`, patch || { name: f.name, code: f.code, client: f.client, description: f.description, status: f.status, calendars: f.calendars, day_basis: f.day_basis, category: f.category,
+      agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, partners: f.partners || null }); await reload(); toast(tr('저장했습니다.')); setErr(null); }
     catch (e) { setErr(e.message); }
   };
   const [delOpen, setDelOpen] = useState(false);
@@ -50,6 +51,10 @@ function Info() {
         <label>{tr('코드')}</label><input type="text" value={f.code || ''} onChange={set('code')} />
         <label>{tr('발주처·협력처')}</label><input type="text" value={f.client || ''} onChange={set('client')} />
         <label>{tr('설명')}</label><textarea value={f.description || ''} onChange={set('description')} />
+        {f.category === 'research' && <>
+          <label>{tr('협약 기간')}</label><div className="row"><input type="date" value={f.agreement_start || ''} onChange={set('agreement_start')} /> ~ <input type="date" value={f.agreement_end || ''} onChange={set('agreement_end')} /></div>
+          <label>{tr('협력 기관')}</label><input type="text" value={f.partners || ''} onChange={set('partners')} placeholder={tr('쉼표로 구분')} />
+        </>}
         <label>{tr('상태')}</label><select value={f.status} onChange={set('status')}>{['계획', '진행중', '보류', '완료'].map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
         <label>{tr('휴일 달력')}</label>
         <div className="row">{COUNTRIES.map(({ code: c, name }) => (

@@ -5,6 +5,11 @@
 //   issue_comment  내 이슈에 댓글              { name, code, by, text }
 //   task_due       내 작업 마감 임박(3일 안)    { name, code, date }
 //   task_late      내 작업 기한 초과            { name, code, date }
+//   review_requested 칸반 검토 요청            { name, code, by }
+//   review_approved / review_rejected 검토 결과 { name, code, by, note }
+//   meeting_invited / meeting_changed 회의 참석 { name, date, time, location, by }
+//   meeting_today  오늘 회의                    { name, time, location }
+//   milestone_due  참여 프로젝트 마일스톤 D-7·D-1·당일 { name, date, days }
 import { db } from './db.js';
 import { now } from './util.js';
 import { stateOf, addDays } from './schedule.js';
@@ -49,5 +54,27 @@ export async function dailyDue(user) {
     const params = { name: t.name, code: t.code, date: t.end };
     if (st === '지연') await notify(null, [user.id], { kind: 'task_late', projectId: t.project_id, entity: 'task', entityId: t.id, params, dedupe: `late:${t.id}:${t.end}` });
     else if (t.end >= today && t.end <= soon) await notify(null, [user.id], { kind: 'task_due', projectId: t.project_id, entity: 'task', entityId: t.id, params, dedupe: `due:${t.id}:${t.end}` });
+  }
+}
+
+// 하루 한 번(사용자별): 참여 프로젝트의 마일스톤(7일 전·1일 전·당일), 내가 참석하는 오늘 회의
+export async function dailySchedule(user) {
+  const today = new Date().toISOString().slice(0, 10);
+  const pids = (await db('project_members as m').join('projects as p', 'p.id', 'm.project_id')
+    .where({ 'm.user_id': user.id, 'p.archived': false }).select('p.id')).map(r => r.id);
+  if (!pids.length) return;
+  const days = [0, 1, 7].map(n => addDays(today, n));
+  const ms = await db('tasks').whereIn('project_id', pids).whereIn('type', ['마일스톤', '제출']).where({ undated: false })
+    .whereIn('end', days).whereNot('status', '완료');
+  for (const t of ms) {
+    const n = days.indexOf(t.end);
+    await notify(null, [user.id], { kind: 'milestone_due', projectId: t.project_id, entity: 'task', entityId: t.id,
+      params: { name: t.name, date: t.end, days: [0, 1, 7][n] }, dedupe: `ms:${t.id}:${t.end}:${[0, 1, 7][n]}` });
+  }
+  const meets = await db('tasks').whereIn('project_id', pids).where({ type: '회의', undated: false, start: today });
+  for (const t of meets) {
+    if (!String(t.attendees || '').split(',').map(Number).includes(user.id)) continue;
+    await notify(null, [user.id], { kind: 'meeting_today', projectId: t.project_id, entity: 'task', entityId: t.id,
+      params: { name: t.name, time: t.start_time, location: t.location }, dedupe: `mt:${t.id}:${today}` });
   }
 }

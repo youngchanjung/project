@@ -200,6 +200,8 @@ function CardBody({ t, chk, members, td, dragging }) {
   return (
     <div className={`kcard ${dragging ? 'dragging' : ''} ${t.st === '완료' ? 'done' : ''}`}>
       {(t.priority === '높음' || t.priority === '긴급') && <span className="kprio" style={{ color: PRIORITY_COLOR[t.priority] }}>{t.priority === '긴급' ? '⚡ ' : '▲ '}{tr(t.priority)}</span>}
+      {t.review_state === 'requested' && <span className="krev">👀 {tr('검토 요청')}</span>}
+      {t.review_state === 'rejected' && t.st !== '완료' && <span className="krev rej" title={t.review_note || ''}>↩ {tr('반려됨')}</span>}
       <div className="kt">{t.is_key ? '★ ' : ''}<Tx>{t.name}</Tx></div>
       {tags.length > 0 && <div className="ktags">{tags.map(x => <span key={x} className="ktag">{x}</span>)}</div>}
       <div className="kmeta">

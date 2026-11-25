@@ -4,7 +4,7 @@ import { api } from '../api.js';
 import { useApp } from '../App.jsx';
 import Modal from '../components/Modal.jsx';
 import { COUNTRIES } from '../countries.js';
-import { fmt, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES } from '../util.js';
+import { addD, fmt, fmtY, diff, ddayTxt, ddayLabel, ROLE_NAME, downloadXLSX, CATEGORIES, catOf, CATEGORY_PHASES } from '../util.js';
 import ExportButton from '../components/ExportButton.jsx';
 import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
@@ -64,6 +64,14 @@ function ProjectsPage({ cat }) {
           <div className="list">
             {[...myLate, ...mySoon].slice(0, 12).map(t => <MyTaskRow key={t.id} t={t} td={td} onClick={() => nav(`/projects/${t.project_id}/tasks?open=${t.id}`)} />)}
             {!myLate.length && !mySoon.length && <div className="empty">{tr('7일 안에 시작·마감하는 내 할 일이 없습니다.')}</div>}
+            {(work.reviews || []).filter(t => !cat || t.category === cat).map(t => (
+              <div key={'r' + t.id} className="item" onClick={() => nav(`/projects/${t.project_id}/board?open=${t.id}`)}>
+                <div className="main"><div className="t"><Tx>{t.name}</Tx></div><div className="small">{catOf(t.category).icon} {t.project_name}</div></div>
+                <span className="krev">👀 {tr('검토 요청')}</span></div>))}
+            {(work.meetings || []).filter(t => (!cat || t.category === cat) && t.start <= addDays7(td)).slice(0, 3).map(t => (
+              <div key={'m' + t.id} className="item" onClick={() => nav(`/projects/${t.project_id}/schedule?open=${t.id}`)}>
+                <div className="main"><div className="t">👥 <Tx>{t.name}</Tx></div><div className="small">{catOf(t.category).icon} {t.project_name} · {fmt(t.start)} {t.start_time || ''}{t.location ? ` · ${t.location}` : ''}</div></div>
+                <span className="badge b-예정">{t.start === td ? tr('오늘') : fmt(t.start)}</span></div>))}
           </div>
         </div>
         <div className="card">
@@ -120,7 +128,7 @@ function ProjectsPage({ cat }) {
           return (
             <div key={p.id} className="card pcard" onClick={() => nav(`/projects/${p.id}`)} style={p.archived ? { opacity: .6 } : undefined}>
               <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}>
-                <div><span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span><b style={{ fontSize: 18 }}>{p.name}</b><div className="small">{[p.code, p.client, p.pms.length ? `PM ${p.pms.join(', ')}` : null].filter(Boolean).join(' · ')}</div></div>
+                <div><span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span><b style={{ fontSize: 18.5 }}>{p.name}</b><div className="small">{[p.code, p.client, p.pms.length ? `PM ${p.pms.join(', ')}` : null].filter(Boolean).join(' · ')}</div></div>
                 <div style={{ textAlign: 'right' }}><span className={`badge ${p.status === '진행중' ? 'b-진행중' : p.status === '완료' ? 'b-완료' : p.status === '보류' ? 'b-보류' : 'b-예정'}`}>{tr(p.archived ? '보관' : p.status)}</span><div className="small">{tr(ROLE_NAME[p.myRole])}</div></div>
               </div>
               <div className="small">{s.start ? `${fmtY(s.start)} ~ ${fmtY(s.end)}` : tr('날짜 있는 작업 없음')}</div>
@@ -138,6 +146,8 @@ function ProjectsPage({ cat }) {
   );
 }
 
+const addDays7 = d => addD(d, 7);
+
 // 내 할 일 한 줄 (홈·내 할 일 화면 공통)
 export function MyTaskRow({ t, td, onClick, onDone }) {
   const c = catOf(t.category);
@@ -154,7 +164,7 @@ export function MyTaskRow({ t, td, onClick, onDone }) {
 
 function NewProject({ category, onClose, onDone }) {
   const { toast } = useApp();
-  const [f, setF] = useState({ category: category || '', name: '', code: '', client: '', description: '', calendars: 'KR', day_basis: 'workday', phases: '' });
+  const [f, setF] = useState({ category: category || '', name: '', code: '', client: '', description: '', calendars: 'KR', day_basis: 'workday', phases: '', agreement_start: '', agreement_end: '', partners: '', template: true });
   const [more, setMore] = useState(false);
   const pickCat = k => setF({ ...f, category: k, phases: tr(CATEGORY_PHASES[k] || '') });
   useEffect(() => { if (category) pickCat(category); }, []); // eslint-disable-line
@@ -163,7 +173,7 @@ function NewProject({ category, onClose, onDone }) {
   const save = async () => {
     if (!f.category) return setErr(tr('카테고리를 고르세요.'));
     try {
-      const p = await api.post('/projects', { ...f, phases: f.phases.split(',').map(s => s.trim()).filter(Boolean) });
+      const p = await api.post('/projects', { ...f, agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, phases: f.phases.split(',').map(s => s.trim()).filter(Boolean) });
       toast(tr('프로젝트를 만들었습니다. 참여자는 ‘설정’에서 추가하세요.'));
       onDone(p);
     } catch (e) { setErr(e.message); }
@@ -178,7 +188,13 @@ function NewProject({ category, onClose, onDone }) {
           </button>))}
       </div>
       <div className="form">
-        <label>{tr('이름 *')}</label><input type="text" value={f.name} onChange={set('name')} autoFocus />
+        <label>{tr(f.category === 'research' ? '과제명 *' : '이름 *')}</label><input type="text" value={f.name} onChange={set('name')} autoFocus />
+        {f.category === 'research' && <>
+          <label>{tr('협약 기간')}</label><div className="row"><input type="date" value={f.agreement_start} onChange={set('agreement_start')} /> ~ <input type="date" value={f.agreement_end} onChange={set('agreement_end')} /></div>
+          <label>{tr('협력 기관')}</label><input type="text" value={f.partners} onChange={set('partners')} placeholder={tr('쉼표로 구분')} />
+          <label />
+          <label className="small"><input type="checkbox" checked={f.template} onChange={e => setF({ ...f, template: e.target.checked })} /> {tr('예시 일정 넣기 (착수 회의, 중간·최종 보고, 결과 평가 — 협약 기간에 맞춰 날짜 자동)')}</label>
+        </>}
         <div className="full"><button type="button" className="linkbtn" onClick={() => setMore(!more)}>{more ? '▾' : '▸'} {tr(more ? '자세히 접기' : '자세히 (코드·발주처·단계·휴일 달력)')}</button></div>
         {more && <>
         <label>{tr('코드')}</label><input type="text" value={f.code} onChange={set('code')} placeholder={tr('예: CML-2026')} />

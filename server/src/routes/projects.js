@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { db } from '../db.js';
-import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet } from '../util.js';
+import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate } from '../util.js';
 import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
 import { normCalendars } from '../countries.js';
 import { stateOf } from '../schedule.js';
@@ -11,8 +11,33 @@ export const projectsRouter = Router();
 projectsRouter.use(requireLogin);
 
 const today = () => new Date().toISOString().slice(0, 10);
-const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis', 'category'];
+const PCOLS = ['code', 'name', 'description', 'client', 'status', 'calendars', 'day_basis', 'category', 'agreement_start', 'agreement_end', 'partners'];
 export const CATEGORIES = ['research', 'construction', 'design'];
+function cleanAgreement(b) {
+  for (const f of ['agreement_start', 'agreement_end']) if (b[f] !== undefined) b[f] = optDate(b[f], f);
+  if (b.agreement_start && b.agreement_end && b.agreement_end < b.agreement_start) throw new HttpError(400, '협약 종료일이 시작일보다 빠릅니다.');
+}
+// 카테고리별 예시 일정 (새 프로젝트 만들 때 "예시 넣기")
+// 협약 기간의 가운데 날. 주말이면 앞의 금요일로
+const mid = (a, b) => {
+  const x = new Date(a + 'T00:00:00Z'), y = new Date(b + 'T00:00:00Z');
+  const m = new Date(Math.floor((x.getTime() + y.getTime()) / 2 / 864e5) * 864e5);
+  const back = { 6: 1, 0: 2 }[m.getUTCDay()] || 0;
+  return new Date(m.getTime() - back * 864e5).toISOString().slice(0, 10);
+};
+export function templateTasks(category, p) {
+  if (category === 'research') {
+    const s = p.agreement_start, e = p.agreement_end;
+    const at = d => (d ? { start: d, end: d, undated: false } : { start: now().slice(0, 10), end: now().slice(0, 10), undated: true });
+    return [
+      { name: '착수 회의', type: '회의', ...at(s) },
+      { name: '중간 보고서 제출', type: '마일스톤', is_key: true, ...at(s && e ? mid(s, e) : null) },
+      { name: '최종 보고서 제출', type: '마일스톤', is_key: true, ...at(e) },
+      { name: '결과 평가', type: '마일스톤', is_key: true, ...at(e) }
+    ];
+  }
+  return [];
+}
 const checkCategory = c => { if (c !== undefined && !CATEGORIES.includes(c)) throw new HttpError(400, '카테고리는 연구·시공·설계 중 하나입니다.'); };
 
 export async function loadProject(id) {
@@ -63,12 +88,18 @@ projectsRouter.post('/', ah(async (req, res) => {
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
   if (!body.category) body.category = 'construction';
   checkCategory(body.category);
+  cleanAgreement(body);
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
     await trx('project_members').insert({ project_id: id, user_id: req.user.id, role: 'pm' });
     const phases = Array.isArray(req.body.phases) ? req.body.phases : [];
     for (const [i, name] of phases.entries()) if (name) await trx('phases').insert({ project_id: id, name, sort: i });
     await insertDefaultColumns(trx, id);
+    if (req.body.template) {
+      for (const [i, t] of templateTasks(body.category, body).entries()) {
+        await trx('tasks').insert({ ...t, project_id: id, sort: i + 1, status: '미착수', created_at: now(), updated_at: now(), updated_by: req.user.id });
+      }
+    }
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'create', label: body.name });
     return id;
   });
@@ -106,6 +137,7 @@ projectsRouter.patch('/:id', ah(async (req, res) => {
   if (up.name !== undefined && !String(up.name).trim()) throw new HttpError(400, '프로젝트 이름은 비울 수 없습니다.');
   if (up.archived !== undefined) up.archived = !!up.archived;
   checkCategory(up.category);
+  cleanAgreement(up);
   await db('projects').where({ id }).update({ ...up, updated_at: now() });
   await audit(null, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'update', label: before.name, changes: diff(before, up) });
   res.json(await loadProject(id));
