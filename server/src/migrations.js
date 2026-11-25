@@ -356,8 +356,52 @@ const migrations = [
         t.index(['project_id']);
       });
     }
+  },
+  {
+    // 설계 1순위(11/25): 예상 시간·사람별 업무량, 단계 제출일, 프로젝트 템플릿
+    name: '013_design_workload',
+    async up(k) {
+      await k.schema.alterTable('tasks', t => {
+        t.float('est_hours'); // 예상 시간 (선택 입력, 업무량 계산용)
+      });
+      await k.schema.alterTable('phases', t => {
+        t.string('due', 10); // 제출일 (설계: 계획·기본·실시설계 제출 등)
+      });
+      await k.schema.alterTable('users', t => {
+        t.float('weekly_hours').notNullable().defaultTo(40); // 주당 근무 가능 시간 (업무량 기준)
+      });
+      await k.schema.createTable('project_templates', t => {
+        t.increments('id');
+        t.string('name', 100).notNullable();
+        t.string('category', 16).notNullable().defaultTo('design');
+        t.text('data').notNullable(); // JSON: { phases, columns, tasks }
+        t.string('created_at', 32);
+        t.integer('created_by');
+      });
+      await k('project_templates').insert({ name: '건축 설계 기본', category: 'design', data: JSON.stringify(BUILTIN_DESIGN_TEMPLATE), created_at: new Date().toISOString() });
+    }
   }
 ];
+
+// 처음 깔 때 들어가는 설계 템플릿 예시 (프로젝트 설정에서 지울 수 있음). 칸반 열이 없으면 기본 4열
+export const BUILTIN_DESIGN_TEMPLATE = {
+  phases: [{ name: '계획설계', color: '#2f6fde' }, { name: '기본설계', color: '#8e5bd8' }, { name: '실시설계', color: '#d9822b' }, { name: '인허가', color: '#159a8c' }],
+  tasks: [
+    { name: '현황 조사·법규 검토', phase: 0, checklist: ['대지 현황 사진', '용도지역·건폐율·용적률 확인', '관련 법규 목록'] },
+    { name: '배치·매스 계획안', phase: 0, checklist: ['대안 2~3개', '면적표'] },
+    { name: '계획설계 보고', phase: 0, type: '제출', is_key: true },
+    { name: '평면도', phase: 1, tags: '평면' },
+    { name: '입면·단면도', phase: 1, tags: '입면, 단면' },
+    { name: '구조·설비 협의', phase: 1, checklist: ['구조 협의 회의', '설비 협의 회의'] },
+    { name: '기본설계 제출', phase: 1, type: '제출', is_key: true },
+    { name: '상세도', phase: 2, tags: '상세' },
+    { name: '마감·창호 일람표', phase: 2 },
+    { name: '도면 검토(체크리스트)', phase: 2, checklist: ['도면 번호·목록', '치수 확인', '구조·설비 도면과 대조'] },
+    { name: '실시설계 제출', phase: 2, type: '제출', is_key: true },
+    { name: '인허가 서류 준비', phase: 3, checklist: ['건축허가 신청서', '설계도서', '관련 협의 서류'] },
+    { name: '건축허가 접수', phase: 3, type: '제출', is_key: true }
+  ]
+};
 
 export const DEFAULT_COLUMNS = [
   { name: '할 일', color: '#8a93a6', status: '미착수' },

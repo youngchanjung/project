@@ -95,8 +95,23 @@ export const CATEGORIES = [
   { key: 'construction', name: '시공', icon: '🏗️', color: '#d9822b', desc: '상세 스케줄: 간트·크리티컬 패스·기준선·룩어헤드',
     view: 'gantt', tabs: ['gantt', 'lookahead', 'tasks', 'progress', 'calendar', 'dashboard', 'issues', 'board', 'meetings', 'settings'] },
   { key: 'design', name: '설계', icon: '📐', color: '#159a8c', desc: '할 일을 카드로 만들고 칸반에서 끌어 옮기기',
-    view: 'board', tabs: ['board', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
+    view: 'board', tabs: ['board', 'workload', 'tasks', 'calendar', 'gantt', 'issues', 'meetings', 'dashboard', 'settings'] }
 ];
+// 단계 제출일 위험: 제출일이 있는 단계마다 남은 날·미완료·검토 대기·제출일 뒤 마감 건수
+//   level: late(제출일 지남, 미완료 있음) | warn(7일 안 또는 제출일 뒤 마감 카드) | info(14일 안) | done(모두 완료)
+export function phaseRisks(phases, tasks, td) {
+  return phases.filter(p => p.due).map(p => {
+    const ts = tasks.filter(t => t.phase_id === p.id);
+    const open = ts.filter(t => t.st !== '완료' && t.st !== '보류');
+    const after = open.filter(t => !t.undated && t.end > p.due).length;
+    const n = diff(td, p.due);
+    const level = !open.length ? 'done' : n < 0 ? 'late' : n <= 7 || after ? 'warn' : 'info';
+    return { phase: p, n, total: ts.length, open: open.length, review: open.filter(t => t.review_state === 'requested').length, after, level };
+  }).filter(r => (r.level === 'done' ? r.n >= 0 && r.n <= 7 : r.level !== 'info' || r.n <= 14))
+    .sort((a, b) => a.phase.due.localeCompare(b.phase.due));
+}
+// 예상 시간 표기: 8 → 8h, 1.5 → 1.5h
+export const fmtH = h => (h || h === 0 ? `${Math.round(h * 10) / 10}h` : '');
 export const catOf = key => CATEGORIES.find(c => c.key === key) || CATEGORIES[1];
 // 새 프로젝트 기본 단계 (카테고리별 예시)
 export const CATEGORY_PHASES = { research: '1차년도, 2차년도', construction: '준비, 시공, 검사, 준공', design: '' };

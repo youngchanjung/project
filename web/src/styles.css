@@ -466,3 +466,29 @@ tr.sel td{background:var(--accent-soft)}
   body.print-gantt .addrow{display:none}
   @page{size:A3 landscape;margin:10mm}
 }
+/* 설계: 단계 제출일 위험 띠 (칸반 위) */
+.duebar{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 12px}
+.duechip{display:inline-flex;align-items:center;flex-wrap:wrap;gap:4px;border:1px solid var(--line);background:var(--panel);border-radius:9px;padding:6px 12px;cursor:pointer;font-size:calc(19px*var(--fs));color:var(--text);text-align:left}
+.duechip .dd{font-weight:800}
+.duechip.late{border-color:var(--late);background:var(--late-soft)}.duechip.late .dd{color:var(--late)}
+.duechip.warn{border-color:var(--soon);background:var(--soon-soft)}.duechip.warn .dd{color:var(--soon)}
+.duechip.done{border-color:var(--done);background:var(--done-soft)}.duechip.done .dd{color:var(--done)}
+.duechip .warnx{color:var(--late);font-weight:700}
+.duechip.on{outline:2px solid var(--accent);outline-offset:1px}
+.kest{color:var(--muted)}
+/* 설계: 업무량 */
+.wl-wrap{overflow-x:auto}
+table.wl{width:100%;border-collapse:collapse}
+table.wl th{text-align:left;font-weight:600;padding:8px;border-bottom:1px solid var(--line);white-space:nowrap}
+table.wl td{padding:8px;border-bottom:1px solid var(--line);vertical-align:top}
+.wl-c{cursor:pointer;min-width:150px;border-radius:6px}
+.wl-c:hover{background:var(--hover)}
+.wl-c.on{background:var(--accent-soft)}
+.wl-bar{position:relative;display:flex;height:10px;border-radius:5px;background:var(--plan-soft);overflow:hidden;margin-bottom:4px}
+.wl-bar .here{background:var(--accent)}.wl-bar .other{background:var(--accent);opacity:.35}
+.wl-bar .cap{position:absolute;top:0;bottom:0;width:2px;background:var(--text)}
+.wl-c.high .wl-bar .here{background:var(--soon)}.wl-c.high .wl-bar .other{background:var(--soon)}.wl-c.high .wl-n b{color:var(--soon)}
+.wl-c.over .wl-bar .here{background:var(--late)}.wl-c.over .wl-bar .other{background:var(--late)}.wl-c.over .wl-n b{color:var(--late)}
+.wl-key{display:inline-block;width:14px;height:10px;border-radius:3px;background:var(--accent);vertical-align:middle;margin-left:8px}
+.wl-key.other{opacity:.35}
+tr.clickable{cursor:pointer}tr.clickable:hover{background:var(--hover)}

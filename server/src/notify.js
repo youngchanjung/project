@@ -10,6 +10,7 @@
 //   meeting_invited / meeting_changed 회의 참석 { name, date, time, location, by }
 //   meeting_today  오늘 회의                    { name, time, location }
 //   milestone_due  참여 프로젝트 마일스톤 D-7·D-1·당일 { name, date, days }
+//   phase_due      참여 프로젝트 단계 제출일 D-7·D-1·당일, 미완료 할 일이 있을 때 { name, date, days, open, review }
 import { db } from './db.js';
 import { now } from './util.js';
 import { stateOf, addDays } from './schedule.js';
@@ -70,6 +71,15 @@ export async function dailySchedule(user) {
     const n = days.indexOf(t.end);
     await notify(null, [user.id], { kind: 'milestone_due', projectId: t.project_id, entity: 'task', entityId: t.id,
       params: { name: t.name, date: t.end, days: [0, 1, 7][n] }, dedupe: `ms:${t.id}:${t.end}:${[0, 1, 7][n]}` });
+  }
+  // 단계 제출일: 그 단계에 아직 끝나지 않은 할 일이 있으면 알림
+  const phs = await db('phases').whereIn('project_id', pids).whereIn('due', days);
+  for (const ph of phs) {
+    const open = await db('tasks').where({ phase_id: ph.id }).whereNot('status', '완료').whereNull('actual_end').whereNot('status', '보류').select('review_state');
+    if (!open.length) continue;
+    const n = [0, 1, 7][days.indexOf(ph.due)];
+    await notify(null, [user.id], { kind: 'phase_due', projectId: ph.project_id, entity: 'phase', entityId: ph.id,
+      params: { name: ph.name, date: ph.due, days: n, open: open.length, review: open.filter(t => t.review_state === 'requested').length }, dedupe: `ph:${ph.id}:${ph.due}:${n}` });
   }
   const meets = await db('tasks').whereIn('project_id', pids).where({ type: '회의', undated: false, start: today });
   for (const t of meets) {

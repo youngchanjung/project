@@ -15,6 +15,7 @@ import Issues from '../views/Issues.jsx';
 import Settings from '../views/Settings.jsx';
 import Meetings from '../views/Meetings.jsx';
 import Lookahead from '../views/Lookahead.jsx';
+import Workload from '../views/Workload.jsx';
 import Progress from '../views/Progress.jsx';
 import TaskModal from '../components/TaskModal.jsx';
 import IssueModal from '../components/IssueModal.jsx';
@@ -87,7 +88,7 @@ export default function Project() {
   const isCons = cat.key === 'construction';
   const NAMES = {
     dashboard: tr('대시보드'), gantt: tr('간트'), lookahead: tr('룩어헤드'), progress: tr('진척 입력'), calendar: tr('달력'), schedule: tr('일정'), tasks: tr(isCons ? '작업 목록' : '할 일 목록'),
-    board: tr('칸반'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
+    board: tr('칸반'), workload: tr('업무량'), issues: `${tr('이슈')} (${data.issues.filter(i => i.status !== '해결완료').length})`, meetings: tr('회의록'), settings: tr('설정')
   };
   const tabs = cat.tabs.map(k => [k, NAMES[k]]);
 
@@ -111,6 +112,7 @@ export default function Project() {
           <Route index element={<Navigate to={`/projects/${id}/${cat.view}${location.search}`} replace />} />
           <Route path="dashboard" element={<><FilterBar /><Dashboard /></>} />
           <Route path="board" element={<Board />} />
+          <Route path="workload" element={<Workload />} />
           <Route path="schedule" element={<Schedule />} />
           <Route path="gantt" element={<Gantt />} />
           <Route path="lookahead" element={<Lookahead />} />

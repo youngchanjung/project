@@ -278,14 +278,18 @@ function NewProject({ category, onClose, onDone }) {
   const { toast } = useApp();
   const [f, setF] = useState({ category: category || '', name: '', code: '', client: '', description: '', calendars: 'KR', day_basis: 'workday', phases: '', agreement_start: '', agreement_end: '', partners: '', template: true });
   const [more, setMore] = useState(false);
-  const pickCat = k => setF({ ...f, category: k, phases: tr(CATEGORY_PHASES[k] || '') });
+  const [tpls, setTpls] = useState([]);
+  const [tplId, setTplId] = useState('');
+  const pickCat = k => { setF({ ...f, category: k, phases: tr(CATEGORY_PHASES[k] || '') }); setTplId(''); };
+  useEffect(() => { if (f.category) api.get(`/projects/templates?category=${f.category}`).then(setTpls).catch(() => setTpls([])); else setTpls([]); }, [f.category]);
+  const tpl = tpls.find(t => t.id === Number(tplId));
   useEffect(() => { if (category) pickCat(category); }, []); // eslint-disable-line
   const [err, setErr] = useState(null);
   const set = k => e => setF({ ...f, [k]: e.target.value });
   const save = async () => {
     if (!f.category) return setErr(tr('카테고리를 고르세요.'));
     try {
-      const p = await api.post('/projects', { ...f, agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, phases: f.phases.split(',').map(s => s.trim()).filter(Boolean) });
+      const p = await api.post('/projects', { ...f, agreement_start: f.agreement_start || null, agreement_end: f.agreement_end || null, phases: f.phases.split(',').map(s => s.trim()).filter(Boolean), template_id: tpl ? tpl.id : null });
       toast(tr('프로젝트를 만들었습니다. 참여자는 ‘설정’에서 추가하세요.'));
       onDone(p);
     } catch (e) { setErr(e.message); }
@@ -307,12 +311,17 @@ function NewProject({ category, onClose, onDone }) {
           <label />
           <label className="small"><input type="checkbox" checked={f.template} onChange={e => setF({ ...f, template: e.target.checked })} /> {tr('예시 일정 넣기 (착수 회의, 중간·최종 보고, 결과 평가 — 협약 기간에 맞춰 날짜 자동)')}</label>
         </>}
+        {tpls.length > 0 && <>
+          <label>{tr('템플릿')}</label>
+          <div className="row"><select value={tplId} onChange={e => setTplId(e.target.value)}><option value="">{tr('(사용 안 함 · 빈 프로젝트)')}</option>{tpls.map(t => <option key={t.id} value={t.id}>{t.name}</option>)}</select>
+            {tpl && <span className="small">{tpl.phases.join(' · ')} · {tr('할 일 {n}건', { n: tpl.tasks })}</span>}</div>
+        </>}
         <div className="full"><button type="button" className="linkbtn" onClick={() => setMore(!more)}>{more ? '▾' : '▸'} {tr(more ? '자세히 접기' : '자세히 (코드·발주처·단계·휴일 달력)')}</button></div>
         {more && <>
         <label>{tr('코드')}</label><input type="text" value={f.code} onChange={set('code')} placeholder={tr('예: CML-2026')} />
         <label>{tr('발주처·협력처')}</label><input type="text" value={f.client} onChange={set('client')} />
         <label>{tr('설명')}</label><textarea value={f.description} onChange={set('description')} />
-        <label>{tr('단계 (쉼표 구분)')}</label><input type="text" value={f.phases} onChange={set('phases')} />
+        {!tpl && <><label>{tr('단계 (쉼표 구분)')}</label><input type="text" value={f.phases} onChange={set('phases')} /></>}
         <label>{tr('휴일 달력')}</label>
         <div className="row">{COUNTRIES.map(({ code: c, name }) => (
           <label key={c} className="small"><input type="checkbox" checked={f.calendars.split(',').includes(c)} onChange={e => {

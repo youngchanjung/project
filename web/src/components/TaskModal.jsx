@@ -18,9 +18,9 @@ export default function TaskModal({ id, preset, onClose }) {
   const isCons = catOf(project.category).key === 'construction';
   const { user } = useApp();
   // 시공은 날짜가 기본, 연구·설계는 날짜 없이도 만들 수 있게 빈 값으로 시작
-  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', ...preset };
+  const blank = { name: '', name_en: '', code: '', type: '작업', phase_id: isCons ? phases[0]?.id || '' : '', owner: '', assignee_id: '', start: isCons ? td : '', end: isCons ? td : '', status: '미착수', progress: 0, is_key: false, ref: '', note: '', not_before: '', baseline_start: '', baseline_end: '', actual_end: '', priority: '보통', tags: '', reviewer_id: '', board_column_id: '', start_time: '', end_time: '', location: '', attendees: '', meeting_url: '', company: '', trade: '', deadline: '', actual_start: '', parent_id: '', est_hours: '', ...preset };
   const fromTask = x => ({ ...x, phase_id: x.phase_id || '', assignee_id: x.assignee_id || '', reviewer_id: x.reviewer_id || '', board_column_id: x.board_column_id || '', start: x.undated ? '' : x.start, end: x.undated ? '' : x.end,
-    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '' });
+    start_time: x.start_time || '', end_time: x.end_time || '', location: x.location || '', attendees: x.attendees || '', meeting_url: x.meeting_url || '', company: x.company || '', trade: x.trade || '', deadline: x.deadline || '', actual_start: x.actual_start || '', parent_id: x.parent_id || '', est_hours: x.est_hours ?? '' });
   const [f, setF] = useState(() => t ? fromTask(t) : blank);
   // 하위 작업(WBS): 자기 자신과 자기 하위 작업은 상위로 고를 수 없음
   const kids = t ? tasks.filter(x => x.parent_id === t.id) : [];
@@ -53,7 +53,7 @@ export default function TaskModal({ id, preset, onClose }) {
     setErr(null); setBusy(true);
     const body = { ...f };
     for (const k of ['id', 'project_id', 'updated_at', 'updated_by', 'st', 'undated', 'created_at', 'board_order']) delete body[k];
-    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'deadline', 'actual_start']) if (body[k] === '') body[k] = null;
+    for (const k of ['start', 'end', 'not_before', 'baseline_start', 'baseline_end', 'actual_end', 'deadline', 'actual_start', 'est_hours']) if (body[k] === '') body[k] = null;
     for (const k of ['float', 'crit']) delete body[k];
     if (body.type === '마일스톤' || body.type === '제출' || body.type === '지급') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
     if (body.type === '회의') { if (body.start && (!body.end || body.end < body.start)) body.end = body.start; }
@@ -124,6 +124,12 @@ export default function TaskModal({ id, preset, onClose }) {
             {t && columns.length > 0 && <span className="small">{tr('칸반 열')}: {tr(columns.find(c => c.id === columnOf(t, columns))?.name || '')}</span>}</div>
           <label>{tr('우선순위')}</label>
           <div className="row"><select value={f.priority || '보통'} onChange={set('priority')}>{TASK_PRIORITY.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select></div>
+          {!isCons && !isMeeting && <>
+            {phases.length > 0 && <><label>{tr('단계')}</label><div className="row"><select value={f.phase_id} onChange={set('phase_id')}><option value="">{tr('(없음)')}</option>{phases.map(p => <option key={p.id} value={p.id}>{p.name}{p.due ? ` · ${tr('제출')} ${fmtY(p.due)}` : ''}</option>)}</select>
+              {(() => { const due = phases.find(p => p.id === Number(f.phase_id))?.due; return due && f.end && f.end > due ? <span className="small" style={{ color: 'var(--late)' }}>⚠ {tr('마감일이 단계 제출일({date})보다 늦습니다.', { date: fmtY(due) })}</span> : null; })()}</div></>}
+            <label>{tr('예상 시간')}</label>
+            <div className="row"><input type="number" min="0" max="2000" step="0.5" value={f.est_hours ?? ''} onChange={set('est_hours')} style={{ width: 110 }} placeholder={tr('예: 8')} /><span className="small">{tr('시간 · 선택 입력. 넣으면 ‘업무량’ 화면에서 사람별 합계를 봅니다.')}</span></div>
+          </>}
           <label>{tr('태그')}</label><input type="text" value={f.tags || ''} onChange={set('tags')} placeholder={tr('쉼표로 구분 (예: 평면, 입면, 구조)')} />
           <label>{tr('메모')}</label><textarea value={f.note || ''} onChange={set('note')} />
           {t && <TxHint text={t.note} />}
@@ -136,7 +142,7 @@ export default function TaskModal({ id, preset, onClose }) {
             <label>{tr('시작일')}</label>
             <div className="row"><DateInput value={f.start || ''} onChange={e => setF({ ...f, start: e.target.value, end: !f.end || f.end < e.target.value ? e.target.value : f.end })} />
               {f.start && f.end && <span className="small">{diff(f.start, f.end) + 1}{tr('일')}</span>}</div>
-            <label>{tr('단계')}</label><select value={f.phase_id} onChange={set('phase_id')}><option value="">{tr('(없음)')}</option>{phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select>
+            {(isCons || isMeeting || !phases.length) && <><label>{tr('단계')}</label><select value={f.phase_id} onChange={set('phase_id')}><option value="">{tr('(없음)')}</option>{phases.map(p => <option key={p.id} value={p.id}>{p.name}</option>)}</select></>}
             <label>{tr(isCons ? 'ID · 유형' : 'ID')}</label>
             <div className="row"><input type="text" value={f.code || ''} onChange={set('code')} placeholder={tr('예: 02-D1')} style={{ width: 120 }} />
               {isCons && <><select value={f.type} onChange={set('type')}>{TASK_TYPES.map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>
