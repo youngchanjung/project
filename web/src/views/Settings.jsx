@@ -9,6 +9,7 @@ import { COUNTRIES } from '../countries.js';
 import { ROLE_NAME, PALETTE, CATEGORIES, TASK_STATUS } from '../util.js';
 import { Tx } from '../contentTr.jsx';
 import { tr } from '../i18n.js';
+import DateInput from '../components/DateInput.jsx';
 
 export default function Settings() {
   const { can } = useProject();
@@ -52,7 +53,7 @@ function Info() {
         <label>{tr('발주처·협력처')}</label><input type="text" value={f.client || ''} onChange={set('client')} />
         <label>{tr('설명')}</label><textarea value={f.description || ''} onChange={set('description')} />
         {f.category === 'research' && <>
-          <label>{tr('협약 기간')}</label><div className="row"><input type="date" value={f.agreement_start || ''} onChange={set('agreement_start')} /> ~ <input type="date" value={f.agreement_end || ''} onChange={set('agreement_end')} /></div>
+          <label>{tr('협약 기간')}</label><div className="row"><DateInput value={f.agreement_start || ''} onChange={set('agreement_start')} /> ~ <DateInput value={f.agreement_end || ''} onChange={set('agreement_end')} /></div>
           <label>{tr('협력 기관')}</label><input type="text" value={f.partners || ''} onChange={set('partners')} placeholder={tr('쉼표로 구분')} />
         </>}
         <label>{tr('상태')}</label><select value={f.status} onChange={set('status')}>{['계획', '진행중', '보류', '완료'].map(x => <option key={x} value={x}>{tr(x)}</option>)}</select>

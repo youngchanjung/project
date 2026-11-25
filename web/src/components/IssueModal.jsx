@@ -6,6 +6,7 @@ import { useProject } from '../pages/Project.jsx';
 import { ISSUE_STATUS, PRIORITY, diff, today } from '../util.js';
 import { tr, locale } from '../i18n.js';
 import { Tx, TxHint } from '../contentTr.jsx';
+import DateInput from './DateInput.jsx';
 
 export default function IssueModal({ id, preset, onClose }) {
   const { issues, tasks, members, project, can, reload, toast, openTask } = useProject();
@@ -65,7 +66,7 @@ export default function IssueModal({ id, preset, onClose }) {
         <div className="row"><input type="text" value={f.owner || ''} onChange={set('owner')} placeholder={tr('이름 (자유 입력)')} style={{ width: 160 }} />
           <select value={f.assignee_id} onChange={set('assignee_id')}><option value="">{tr('계정 지정 안 함')}</option>{members.map(m => <option key={m.id} value={m.id}>{m.name}</option>)}</select></div>
         <label>{tr('발생 · 목표 · 해결')}</label>
-        <div className="row"><input type="date" value={f.raised || ''} onChange={set('raised')} /><input type="date" value={f.target || ''} onChange={set('target')} title={tr('해결 목표일')} /><input type="date" value={f.resolved || ''} onChange={set('resolved')} title={tr('해결일')} /></div>
+        <div className="row"><DateInput value={f.raised || ''} onChange={set('raised')} /><DateInput value={f.target || ''} onChange={set('target')} title={tr('해결 목표일')} /><DateInput value={f.resolved || ''} onChange={set('resolved')} title={tr('해결일')} /></div>
         <label>{tr('출처')}</label><input type="text" value={f.source || ''} onChange={set('source')} />
         <label>{tr('비고')}</label><textarea value={f.remark || ''} onChange={set('remark')} />
         {i && <TxHint text={i.remark} />}

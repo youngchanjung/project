@@ -9,6 +9,7 @@ import ExportButton from '../components/ExportButton.jsx';
 import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
+import DateInput from '../components/DateInput.jsx';
 
 export default function Home() {
   return <ProjectsPage />;
@@ -190,7 +191,7 @@ function NewProject({ category, onClose, onDone }) {
       <div className="form">
         <label>{tr(f.category === 'research' ? '과제명 *' : '이름 *')}</label><input type="text" value={f.name} onChange={set('name')} autoFocus />
         {f.category === 'research' && <>
-          <label>{tr('협약 기간')}</label><div className="row"><input type="date" value={f.agreement_start} onChange={set('agreement_start')} /> ~ <input type="date" value={f.agreement_end} onChange={set('agreement_end')} /></div>
+          <label>{tr('협약 기간')}</label><div className="row"><DateInput value={f.agreement_start} onChange={set('agreement_start')} /> ~ <DateInput value={f.agreement_end} onChange={set('agreement_end')} /></div>
           <label>{tr('협력 기관')}</label><input type="text" value={f.partners} onChange={set('partners')} placeholder={tr('쉼표로 구분')} />
           <label />
           <label className="small"><input type="checkbox" checked={f.template} onChange={e => setF({ ...f, template: e.target.checked })} /> {tr('예시 일정 넣기 (착수 회의, 중간·최종 보고, 결과 평가 — 협약 기간에 맞춰 날짜 자동)')}</label>
