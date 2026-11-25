@@ -59,7 +59,8 @@ projectsRouter.get('/', ah(async (req, res) => {
   const issues = await db('issues').select('project_id', 'status', 'resolved', 'target', 'priority');
   const mem = await db('project_members').where({ user_id: req.user.id });
   const pms = await db('project_members as m').join('users as u', 'u.id', 'm.user_id').where('m.role', 'pm').select('m.project_id', 'u.name');
-  const out = ps.map(p => {
+  const visible = req.user.external ? ps.filter(p => mem.some(m => m.project_id === p.id)) : ps;
+  const out = visible.map(p => {
     const ts = tasks.filter(x => x.project_id === p.id);
     const st = ts.map(x => stateOf(x, t));
     const is = issues.filter(x => x.project_id === p.id && x.status !== '해결완료' && !x.resolved);
@@ -201,12 +202,27 @@ projectsRouter.get('/:id/data', ah(async (req, res) => {
     db('baselines').where({ project_id: id }).orderBy('id', 'desc'),
     db('timeline_events').where({ project_id: id }).orderBy('start')
   ]);
+  if (!role) throw new HttpError(403, '참여하지 않은 프로젝트입니다.');
+  // 쓴 시간(기록 합계)과 참여자 휴가 (카드 표시·마감 경고용)
+  const spentRows = await db('time_entries').where({ project_id: id }).whereNotNull('task_id').groupBy('task_id').select('task_id').sum({ h: 'hours' });
+  const spent = new Map(spentRows.map(r => [r.task_id, Math.round(Number(r.h) * 10) / 10]));
+  const since = new Date(Date.now() - 60 * 864e5).toISOString().slice(0, 10);
+  const leaves = members.length ? await db('leaves').whereIn('user_id', members.map(m => m.id)).where('end', '>=', since).orderBy('start') : [];
+  // 외부 협력자: 자기 카드(담당·검토)만, 이슈는 보이지 않음
+  if (req.user.external) {
+    const mine = new Set(tasks.filter(t => t.assignee_id === req.user.id || t.reviewer_id === req.user.id).map(t => t.id));
+    tasks.splice(0, tasks.length, ...tasks.filter(t => mine.has(t.id)));
+    deps.splice(0, deps.length, ...deps.filter(d => mine.has(d.pred_id) && mine.has(d.succ_id)));
+    issues.splice(0, issues.length);
+    checklist.splice(0, checklist.length, ...checklist.filter(c => mine.has(c.task_id)));
+  }
   // 크리티컬 패스·여유일 (근무일 기준, 프로젝트 달력)
   const cal = project.day_basis === 'calendar' ? null : new Set(hol.map(h => h.date));
   const cp = criticalPath(tasks.map(t => ({ ...t, undated: !!t.undated })), deps, cal);
   res.json({
     project: { ...project, archived: !!project.archived }, phases,
-    tasks: tasks.map(t => ({ ...t, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
+    leaves: req.user.external ? leaves.filter(l => l.user_id === req.user.id) : leaves,
+    tasks: tasks.map(t => ({ ...t, spent: spent.get(t.id) || 0, is_key: !!t.is_key, undated: !!t.undated, float: cp.get(t.id)?.float ?? null, crit: !!cp.get(t.id)?.crit })),
     deps, issues, members, role, holidays: hol, baselines, events,
     columns: columns.map(c => ({ ...c, is_review: !!c.is_review })), checklist: checklist.map(c => ({ ...c, done: !!c.done }))
   });
@@ -237,7 +253,7 @@ projectsRouter.delete('/:id', ah(async (req, res) => {
     await trx('baseline_tasks').whereIn('baseline_id', trx('baselines').select('id').where({ project_id: id })).del();
     await trx('baselines').where({ project_id: id }).del();
     await trx('timeline_events').where({ project_id: id }).del();
-    for (const t of ['meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
+    for (const t of ['time_entries', 'meetings', 'dependencies', 'issues', 'tasks', 'board_columns', 'phases', 'project_members']) await trx(t).where({ project_id: id }).del();
     await trx('projects').where({ id }).del();
     await audit(trx, { user: req.user, projectId: id, entity: 'project', entityId: id, action: 'delete', label: p.name });
   });

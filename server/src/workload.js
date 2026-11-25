@@ -51,3 +51,19 @@ export function computeWorkload(tasks, { today, weeks = 4, hol = new Set(), here
   for (const r of byUser.values()) for (const c of r.weeks) { c.hours = r1(c.hours); c.here = r1(c.here); c.tasks.sort((a, b) => a.end.localeCompare(b.end)); }
   return { weeks: ws, byUser };
 }
+
+// 휴가·부재로 빠지는 시간: 주마다 { days, hours } (반차는 0.5일). perDay = 주당 근무 시간 / 5
+export function leaveByWeek(leaves, weeks, hol, perDay) {
+  return weeks.map(w => {
+    let days = 0;
+    for (const l of leaves) {
+      for (let d = l.start < w.start ? w.start : l.start; d <= w.end && d <= l.end; d = addDays(d, 1)) {
+        if (isWorkday(d, hol)) days += l.kind === '반차' ? 0.5 : 1;
+      }
+    }
+    days = Math.min(days, w.workdays);
+    return { days, hours: r1(days * perDay) };
+  });
+}
+// 이 날 휴가 중인가 (반차 제외)
+export const onLeave = (leaves, uid, d) => leaves.some(l => l.user_id === uid && l.kind !== '반차' && l.start <= d && d <= l.end);

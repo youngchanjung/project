@@ -15,8 +15,9 @@ const parseRole = v => (/^(admin|관리자)$/i.test(s(v)) ? 'admin' : 'user');
 export const usersRouter = Router();
 usersRouter.use(requireLogin);
 
-usersRouter.get('/', ah(async (_req, res) => {
+usersRouter.get('/', ah(async (req, res) => {
   const rows = await db('users').orderBy('name');
+  // 단가는 관리자에게만
   res.json(rows.map(publicUser));
 }));
 
@@ -46,7 +47,7 @@ usersRouter.post('/', requireAdmin, ah(async (req, res) => {
     username, name, email: optText(b.email) ?? null, role: parseRole(b.role),
     department_id: (await checkDept(b.department_id)) ?? null,
     employee_no: optText(b.employee_no) ?? null, position: optText(b.position) ?? null, phone: optText(b.phone) ?? null,
-    weekly_hours: weeklyHours(b.weekly_hours) ?? 40,
+    weekly_hours: weeklyHours(b.weekly_hours) ?? 40, external: !!b.external,
     password_hash: await hashPassword(b.password), created_at: now()
   });
   await audit(null, { user: req.user, entity: 'user', entityId: id, action: 'create', label: name });
@@ -64,6 +65,7 @@ usersRouter.patch('/:id', requireAdmin, ah(async (req, res) => {
   if (b.department_id !== undefined) up.department_id = await checkDept(b.department_id);
   if (b.role) up.role = parseRole(b.role);
   if (b.weekly_hours !== undefined) up.weekly_hours = weeklyHours(b.weekly_hours) ?? 40;
+  if (b.external !== undefined) up.external = !!b.external;
   if (b.active !== undefined) up.active = !!b.active;
   if (b.password) {
     if (b.password.length < 8) throw new HttpError(400, '비밀번호는 8자 이상이어야 합니다.');

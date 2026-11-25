@@ -116,3 +116,58 @@ test('프로젝트 템플릿: 기본 템플릿, 저장, 새 프로젝트에 복�
   assert.ok(!list.find(t => t.name === '우리 설계'));
   assert.equal((await call('POST', '/projects', { name: 'X', category: 'design', template_id: 99999 })).status, 400);
 });
+
+test('투입 시간 기록·휴가가 업무량에 반영', async () => {
+  const p = (await call('POST', '/projects', { name: '설계 E', category: 'design' })).body;
+  const me = (await call('GET', '/auth/me')).body.user;
+  const k = (await call('POST', '/users', { username: 'kim2', name: '김기록', password: 'pass12345' })).body;
+  await call('PUT', `/projects/${p.id}/members/${k.id}`, { role: 'member' });
+  const t = (await call('POST', `/projects/${p.id}/tasks`, { name: '평면', assignee_id: k.id, start: '2026-11-23', end: '2026-11-27', est_hours: 10 })).body.task;
+  assert.equal((await call('POST', `/projects/${p.id}/time`, { task_id: t.id, hours: 0 })).status, 400);
+  const e1 = (await call('POST', `/projects/${p.id}/time`, { task_id: t.id, hours: 4, date: '2026-11-24', user_id: k.id })).body;
+  assert.equal(e1.user_id, k.id);
+  await call('POST', `/projects/${p.id}/time`, { task_id: t.id, hours: 2.5, date: '2026-11-25' });
+  let d = (await call('GET', `/projects/${p.id}/data`)).body;
+  assert.equal(d.tasks.find(x => x.id === t.id).spent, 6.5);
+  // 휴가: 이번 주 2일 → 근무 가능 40 - 16
+  assert.equal((await call('POST', '/leaves', { user_id: k.id, start: '2026-11-26', end: '2026-11-27', kind: '휴가' })).status, 200);
+  assert.equal((await call('POST', '/leaves', { start: '2026-11-26', end: '2026-11-27', kind: '반차' })).status, 400);
+  const w = (await call('GET', `/workload?project=${p.id}&weeks=1&today=2026-11-25`)).body;
+  const row = w.rows.find(r => r.user.id === k.id);
+  assert.equal(row.leave[0].days, 2);
+  assert.equal(row.caps[0], 24);
+  d = (await call('GET', `/projects/${p.id}/data`)).body;
+  assert.equal(d.leaves.length, 1);
+  const rows = (await call('GET', `/projects/${p.id}/time?from=2026-11-25`)).body;
+  assert.equal(rows.length, 1);
+  assert.equal((await call('DELETE', `/projects/${p.id}/time/${e1.id}`)).status, 200);
+});
+
+test('외부 협력자: 참여 프로젝트의 자기 카드만', async () => {
+  const p = (await call('POST', '/projects', { name: '설계 F', category: 'design' })).body;
+  const other = (await call('POST', '/projects', { name: '설계 G', category: 'design' })).body;
+  const ex = (await call('POST', '/users', { username: 'ext', name: '외부김', password: 'pass12345', external: true })).body;
+  assert.equal(ex.external, true);
+  await call('PUT', `/projects/${p.id}/members/${ex.id}`, { role: 'member' });
+  const mine = (await call('POST', `/projects/${p.id}/tasks`, { name: '외부 도면', assignee_id: ex.id })).body.task;
+  const notMine = (await call('POST', `/projects/${p.id}/tasks`, { name: '내부 검토' })).body.task;
+  await call('POST', `/projects/${p.id}/issues`, { title: '내부 이슈' });
+  const admin = cookie;
+  cookie = '';
+  assert.equal((await call('POST', '/auth/login', { username: 'ext', password: 'pass12345' })).status, 200);
+  try {
+    const list = (await call('GET', '/projects')).body;
+    assert.deepEqual(list.map(x => x.id), [p.id]);
+    const d = (await call('GET', `/projects/${p.id}/data`)).body;
+    assert.deepEqual(d.tasks.map(t => t.id), [mine.id]);
+    assert.equal(d.issues.length, 0);
+    assert.equal((await call('GET', `/projects/${other.id}/data`)).status, 403);
+    assert.equal((await call('PATCH', `/projects/${p.id}/tasks/${notMine.id}`, { name: 'x' })).status, 403);
+    assert.equal((await call('PATCH', `/projects/${p.id}/tasks/${mine.id}`, { status: '진행중' })).status, 200);
+    assert.equal((await call('POST', `/projects/${p.id}/tasks`, { name: '새 카드' })).status, 403);
+    assert.equal((await call('GET', `/projects/${p.id}/issues`)).status, 403);
+    assert.equal((await call('POST', `/projects/${p.id}/time`, { task_id: mine.id, hours: 1 })).status, 200);
+    const w = (await call('GET', `/workload?project=${p.id}&weeks=1`)).body;
+    assert.deepEqual(w.rows.map(r => r.user.id), [ex.id]);
+  } finally { cookie = admin; }
+});
