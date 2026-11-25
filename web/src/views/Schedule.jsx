@@ -74,7 +74,7 @@ export default function Schedule() {
     <>
       <div className="toolbar">
         <button className="btn" onClick={() => move(-1)}>◀</button>
-        <b style={{ fontSize: 19, minWidth: 150, textAlign: 'center' }}>{title}</b>
+        <b style={{ fontSize: 16.5, minWidth: 150, textAlign: 'center' }}>{title}</b>
         <button className="btn" onClick={() => move(1)}>▶</button>
         <button className="btn" onClick={() => setAnchor(td)}>{tr('오늘')}</button>
         <div className="seg">
