@@ -461,6 +461,13 @@ const migrations = [
         }
       }
     }
+  },
+  {
+    // 부서별로 볼 수 있는 카테고리 (쉼표 구분, 비우면 상위 부서를 따르고 끝까지 없으면 전부)
+    name: '018_department_categories',
+    async up(k) {
+      await k.schema.alterTable('departments', t => { t.string('categories', 60); });
+    }
   }
 ];
 

@@ -214,3 +214,27 @@ test('프로젝트 삭제: 작업·선행관계·이슈·댓글이 있어도 관
   assert.equal((await call('DELETE', `/projects/${p.id}`)).status, 200);
   assert.ok(!(await call('GET', '/projects')).body.find(x => x.id === p.id));
 });
+
+test('부서별 카테고리 제한: 정해진 카테고리와 참여 프로젝트만 보임, 하위 부서는 상위 부서를 따름', async () => {
+  const top = (await call('POST', '/departments', { name: '설계본부', categories: ['design'] })).body;
+  assert.equal(top.categories, 'design');
+  const sub = (await call('POST', '/departments', { name: '설계1팀', parent_id: top.id })).body;
+  assert.equal(sub.categories, null);
+  assert.equal((await call('POST', '/departments', { name: 'X팀', categories: ['nope'] })).status, 400);
+  assert.equal((await call('POST', '/departments', { name: '전체팀', categories: ['research', 'construction', 'design'] })).body.categories, null);
+  const lee = (await call('POST', '/users', { username: 'park_d', name: '박설계', password: 'pass12345', department_id: sub.id })).body;
+  const R = (await call('POST', '/projects', { name: '연구 R', category: 'research' })).body;
+  const D = (await call('POST', '/projects', { name: '설계 D', category: 'design' })).body;
+  const C = (await call('POST', '/projects', { name: '시공 C', category: 'construction' })).body;
+  const put = await call('PUT', `/projects/${C.id}/members/${lee.id}`, { role: 'member' }); assert.equal(put.status, 200, JSON.stringify([put.body, lee]));
+  await call('POST', '/auth/login', { username: 'park_d', password: 'pass12345' });
+  assert.deepEqual((await call('GET', '/auth/me')).body.user.categories, ['design']);
+  const ids = (await call('GET', '/projects')).body.map(p => p.id);
+  assert.ok(ids.includes(D.id) && ids.includes(C.id) && !ids.includes(R.id));
+  assert.equal((await call('GET', `/projects/${R.id}/data`)).status, 403);
+  assert.equal((await call('GET', `/projects/${C.id}/data`)).status, 200);
+  assert.equal((await call('POST', '/projects', { name: '연구 X', category: 'research' })).status, 403);
+  assert.equal((await call('POST', '/projects', { name: '설계 X', category: 'design' })).status, 200);
+  await call('POST', '/auth/login', { username: 'admin', password: 'admin1234' });
+  assert.ok((await call('GET', '/projects')).body.some(p => p.id === R.id));
+});

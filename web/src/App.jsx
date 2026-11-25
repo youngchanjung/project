@@ -2,7 +2,7 @@ import { createContext, useContext, useEffect, useState, useCallback } from 'rea
 import Bell from './components/Bell.jsx';
 import PageTip, { resetTips } from './components/PageTip.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
-import { PALETTE, CATEGORIES, personColor } from './util.js';
+import { PALETTE, CATEGORIES, personColor, catAllowed } from './util.js';
 import { api } from './api.js';
 import Login from './pages/Login.jsx';
 import Home, { CategoryPage, ProjectsHome } from './pages/Home.jsx';
@@ -126,6 +126,7 @@ export function rememberProject(id) {
 
 // 왼쪽 메뉴의 프로젝트 목록: 최근 본 프로젝트, 내 프로젝트, 그 밖의 프로젝트
 function SideProjects() {
+  const { user } = useApp();
   const [ps, setPs] = useState([]);
   const [recent, setRecent] = useState([]);
   const [open, setOpen] = useState(() => { try { return JSON.parse(localStorage.getItem('side-sec') || '{}'); } catch { return {}; } });
@@ -150,6 +151,7 @@ function SideProjects() {
         <div className="side-sec-h" style={{ cursor: 'default' }}>{tr('카테고리')}</div>
         {CATEGORIES.map(c => {
           const n = live.filter(p => (p.category || 'construction') === c.key).length;
+          if (!n && !catAllowed(user, c.key)) return null;
           return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj scat"><span className="ico" style={{ width: 22, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
         })}
       </div>

@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import { db } from '../db.js';
 import { ah, HttpError, now, audit, insertId, pick, diff, holidaySet, optDate, projectCalendar } from '../util.js';
-import { requireLogin, projectRole, canEdit, publicUser } from '../auth.js';
+import { requireLogin, projectRole, canEdit, publicUser, visibleProjects, allowedCategories } from '../auth.js';
 import { normCalendars } from '../countries.js';
 import { stateOf, criticalPath, sCurve, addWorkdays, nextWorkdayOnOrAfter, workdaysBetween } from '../schedule.js';
 import fs from 'node:fs';
@@ -62,7 +62,7 @@ projectsRouter.get('/', ah(async (req, res) => {
   const issues = await db('issues').select('project_id', 'status', 'resolved', 'target', 'priority');
   const mem = await db('project_members').where({ user_id: req.user.id });
   const pms = await db('project_members as m').join('users as u', 'u.id', 'm.user_id').where('m.role', 'pm').select('m.project_id', 'u.name');
-  const visible = req.user.external ? ps.filter(p => mem.some(m => m.project_id === p.id)) : ps;
+  const visible = await visibleProjects(req.user, ps);
   const out = visible.map(p => {
     const ts = tasks.filter(x => x.project_id === p.id);
     const st = ts.map(x => stateOf(x, t));
@@ -92,6 +92,8 @@ projectsRouter.post('/', ah(async (req, res) => {
   if (!body.name?.trim()) throw new HttpError(400, '프로젝트 이름을 입력하세요.');
   if (!body.category) body.category = 'construction';
   checkCategory(body.category);
+  const cats = await allowedCategories(req.user);
+  if (cats && !cats.has(body.category)) throw new HttpError(403, '이 카테고리의 프로젝트를 만들 수 없는 부서입니다.');
   cleanAgreement(body);
   const id = await db.transaction(async trx => {
     const id = await insertId(trx, 'projects', { ...body, name: body.name.trim(), created_at: now(), updated_at: now() });
