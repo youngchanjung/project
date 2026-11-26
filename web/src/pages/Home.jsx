@@ -10,6 +10,7 @@ import CalendarSubscribe from '../components/CalendarSubscribe.jsx';
 import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 import DateInput from '../components/DateInput.jsx';
+import Icon from '../components/Icon.jsx';
 
 // 홈: 오늘 할 일 중심 (11/25 A안). 11/26 배치: 위 내 프로젝트, 아래 왼쪽 내 할 일 · 오른쪽 다가오는 회의. 프로젝트 목록·카테고리 카드는 '프로젝트' 화면(/projects)으로
 export default function Home() {
@@ -33,7 +34,7 @@ export default function Home() {
   // 다가오는 회의(7일 안) + 내 마일스톤·제출 + 내 프로젝트의 다음 핵심 일정 (14일 안)
   const POINTS = ['마일스톤', '제출', '지급', '검토', '홀드포인트'];
   const evs = [
-    ...(work.meetings || []).filter(m => m.start <= wk).map(m => ({ k: 'm' + m.id, date: m.start, time: m.start_time, icon: '👥', name: m.name, sub: [m.project_name, m.location].filter(Boolean).join(' · '), go: `/projects/${m.project_id}/schedule?open=${m.id}` })),
+    ...(work.meetings || []).filter(m => m.start <= wk).map(m => ({ k: 'm' + m.id, date: m.start, time: m.start_time, icon: <Icon name="users" />, name: m.name, sub: [m.project_name, m.location].filter(Boolean).join(' · '), go: `/projects/${m.project_id}/schedule?open=${m.id}` })),
     ...work.tasks.filter(t => POINTS.includes(t.type) && !t.undated && t.state !== '완료' && t.end >= td && t.end <= addD(td, 14)).map(t => ({ k: 't' + t.id, date: t.end, icon: '◆', name: t.name, sub: t.project_name, go: `/projects/${t.project_id}/tasks?open=${t.id}` })),
     ...mine.filter(p => p.stats.nextKey && p.stats.nextKey.date <= addD(td, 14)).map(p => ({ k: 'p' + p.id, date: p.stats.nextKey.date, icon: '★', name: p.stats.nextKey.name, sub: p.name, go: `/projects/${p.id}` }))
   ].filter((e, i, a) => a.findIndex(x => x.name === e.name && x.date === e.date) === i)
@@ -51,11 +52,11 @@ export default function Home() {
         <Link to="/my" className="hchip"><b>{week.length}</b>{tr('이번 주(7일 안)')}</Link>
         <a href="#my-issues" className={`hchip ${issues.some(i => i.target && i.target < td) ? 'late' : ''}`} onClick={e => { if (!issues.length) e.preventDefault(); }}><b>{issues.length}</b>{tr('내 미해결 이슈')}</a>
         <div className="sp" />
-        <button className="btn" onClick={() => setSubscribing(true)} title={tr('내 작업·이슈를 Outlook 달력에 띄웁니다.')} aria-label={tr('Outlook 달력에 구독')}>📅</button>
+        <button className="btn" onClick={() => setSubscribing(true)} title={tr('내 작업·이슈를 Outlook 달력에 띄웁니다.')} aria-label={tr('Outlook 달력에 구독')}><Icon name="calendar" /></button>
       </div>
 
       <div className="card hcard" style={{ '--c': 'var(--c-pink)' }}>
-        <h3>{tr('내 프로젝트')} <Link to="/projects" className="linkbtn">{tr('전체 프로젝트')} →</Link></h3>
+        <h3><span className="hh"><span className="hic"><Icon name="folder" /></span>{tr('내 프로젝트')}</span> <Link to="/projects" className="linkbtn">{tr('전체 프로젝트')} →</Link></h3>
         <div className="hprojs">
           {mine.map(p => {
             const s = p.stats, pct = s.tasks ? Math.round(s.done / s.tasks * 100) : 0, pc = catOf(p.category);
@@ -73,7 +74,7 @@ export default function Home() {
 
       <div className="hgrid">
         <div className="card hcard" style={{ '--c': 'var(--c-green)' }}>
-          <h3>{tr('내 할 일')} <Link to="/my" className="linkbtn">{tr('모두 보기')}{undated.length ? ` (+${tr('날짜 없음')} ${undated.length})` : ''} →</Link></h3>
+          <h3><span className="hh"><span className="hic"><Icon name="check" /></span>{tr('내 할 일')}</span> <Link to="/my" className="linkbtn">{tr('모두 보기')}{undated.length ? ` (+${tr('날짜 없음')} ${undated.length})` : ''} →</Link></h3>
           {late.length > 0 && <><div className="hgrp late">{tr('지연')} {late.length}</div>
             <div className="list">{late.map(t => <MyTaskRow key={t.id} t={t} td={td} onClick={() => openT(t)} />)}</div></>}
           {reviews.length > 0 && <><div className="hgrp">{tr('검토 요청')} {reviews.length}</div>
@@ -91,7 +92,7 @@ export default function Home() {
 
         <div className="hside">
           <div className="card hcard" style={{ '--c': 'var(--c-purple)' }}>
-            <h3>{tr('다가오는 회의·마일스톤')}</h3>
+            <h3><span className="hh"><span className="hic"><Icon name="calendar" /></span>{tr('다가오는 회의·마일스톤')}</span></h3>
             <div className="list">
               {evs.map(e => (
                 <div key={e.k} className="item" onClick={() => nav(e.go)}>
@@ -102,7 +103,7 @@ export default function Home() {
             </div>
           </div>
           {issues.length > 0 && <div className="card hcard" id="my-issues" style={{ '--c': 'var(--c-orange)' }}>
-            <h3>{tr('내 이슈')} <span className="small">{tr('미해결')} {issues.length}{tr('건')}</span></h3>
+            <h3><span className="hh"><span className="hic"><Icon name="alert" /></span>{tr('내 이슈')}</span> <span className="small">{tr('미해결')} {issues.length}{tr('건')}</span></h3>
             <div className="list">
               {[...issues].sort((a, b) => (a.target || '9').localeCompare(b.target || '9')).map(i => (
                 <div key={i.id} className="item" onClick={() => nav(`/projects/${i.project_id}/issues?open=${i.id}`)}>
