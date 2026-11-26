@@ -202,7 +202,7 @@ function PasswordModal({ onClose }) {
 function AppBar({ children }) {
   return (
     <div className="appbar">
-      <NavLink to="/" className="appbar-t"><span className="appbar-logo"><img src="/integra-logo.png" alt="Integra" /></span>Integra Schedule Management</NavLink>
+      <NavLink to="/" className="appbar-t"><picture className="appbar-logo"><source srcSet="/integra-logo-white.png" media="(prefers-color-scheme: dark)" /><img src="/integra-logo.png" alt="Integra" /></picture>Integra Schedule Management</NavLink>
       <div className="sp" />{children}
     </div>
   );
