@@ -5,6 +5,7 @@ import { tr } from '../i18n.js';
 import { fmt } from '../util.js';
 import { Tx } from '../contentTr.jsx';
 import { useApp } from '../App.jsx';
+import Icon from './Icon.jsx';
 
 const range = s => String(s || '').split('~').map(fmt).join('~');
 function message(n) {
@@ -65,7 +66,7 @@ export default function Bell() {
   return (
     <div className="bell" ref={box}>
       <button className="btn sm" onClick={() => { setOpen(!open); if (!open) load(); }} title={tr('알림')} aria-label={tr('알림')}>
-        🔔{data.unread > 0 && <span className="bell-n">{data.unread > 99 ? '99+' : data.unread}</span>}
+        <Icon name="bell" />{data.unread > 0 && <span className="bell-n">{data.unread > 99 ? '99+' : data.unread}</span>}
       </button>
       {open && <div className="bell-pop">
         <div className="bell-head"><b>{tr('알림')}</b>{data.unread > 0 && <button className="btn sm" onClick={() => read({ all: true })}>{tr('모두 읽음')}</button>}</div>

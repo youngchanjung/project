@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState, useCallback } from 'react';
 import Bell from './components/Bell.jsx';
+import Icon from './components/Icon.jsx';
 import PageTip, { resetTips } from './components/PageTip.jsx';
 import { Routes, Route, NavLink, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { PALETTE, CATEGORIES, personColor, catAllowed } from './util.js';
@@ -18,13 +19,16 @@ const FONT_SIZES = [['0.8', '작게'], ['0.9', '보통'], ['1', '크게']];
 const applyFont = v => { document.documentElement.style.setProperty('--fs', v); };
 const savedFont = () => { try { const v = localStorage.getItem('font-scale'); if (FONT_SIZES.some(f => f[0] === v)) return v; } catch {} return '1'; };
 applyFont(savedFont());
+// 디자인 시안 미리보기 (A/B/C). 확정 후 하나만 남김
+try { document.documentElement.dataset.look = localStorage.getItem('look') || 'a'; } catch { document.documentElement.dataset.look = 'a'; }
 function FontSelect() {
   const [v, setV] = useState(savedFont);
   const change = e => { const n = e.target.value; setV(n); applyFont(n); try { localStorage.setItem('font-scale', n); } catch {} };
   return (
-    <select className="tbox" style={{ '--c': 'var(--c-teal)' }} value={v} onChange={change} title={tr('글씨 크기')} aria-label={tr('글씨 크기')}>
-      {FONT_SIZES.map(([k, n]) => <option key={k} value={k}>{tr('글씨')} {tr(n)}</option>)}
-    </select>
+    <label className="tbox tsel" style={{ '--c': 'var(--c-teal)' }} title={tr('글씨 크기')}><Icon name="type" />
+      <select value={v} onChange={change} aria-label={tr('글씨 크기')}>
+        {FONT_SIZES.map(([k, n]) => <option key={k} value={k}>{tr('글씨')} {tr(n)}</option>)}
+      </select></label>
   );
 }
 
@@ -77,10 +81,10 @@ export default function App() {
             <button className="iconbtn" onClick={toggleSide} title={tr('메뉴 접기')}>«</button>
           </div>
           <nav className="side-nav">
-            <NavLink to="/" end className="snav" style={{ '--c': 'var(--c-blue)' }}><span className="ico">🏠</span>{tr('홈')}</NavLink>
-            <NavLink to="/my" className="snav" style={{ '--c': 'var(--c-green)' }}><span className="ico">✅</span>{tr('내 할 일')}</NavLink>
-            <NavLink to="/projects" end className="snav" style={{ '--c': 'var(--c-orange)' }}><span className="ico">📁</span>{tr('프로젝트')}</NavLink>
-            {user.role === 'admin' && <NavLink to="/admin" className="snav" style={{ '--c': 'var(--c-purple)' }}><span className="ico">⚙️</span>{tr('관리')}</NavLink>}
+            <NavLink to="/" end className="snav" style={{ '--c': 'var(--c-blue)' }}><span className="ico"><Icon name="home" /></span>{tr('홈')}</NavLink>
+            <NavLink to="/my" className="snav" style={{ '--c': 'var(--c-green)' }}><span className="ico"><Icon name="check" /></span>{tr('내 할 일')}</NavLink>
+            <NavLink to="/projects" end className="snav" style={{ '--c': 'var(--c-orange)' }}><span className="ico"><Icon name="folder" /></span>{tr('프로젝트')}</NavLink>
+            {user.role === 'admin' && <NavLink to="/admin" className="snav" style={{ '--c': 'var(--c-purple)' }}><span className="ico"><Icon name="settings" /></span>{tr('관리')}</NavLink>}
           </nav>
           <SideProjects />
         </aside>
@@ -93,13 +97,13 @@ export default function App() {
             {/* 휴대폰 화면에서는 아래 도구를 ⋯ 메뉴 안으로 접음 */}
             <button className="iconbtn tb-more" onClick={() => setTools(v => !v)} title={tr('메뉴')} aria-label={tr('메뉴')} aria-expanded={tools}>⋯</button>
             <div className={`tb-tools ${tools ? 'open' : ''}`} onClick={e => { if (e.target.closest('button')) setTools(false); }}>
-              <button className="tbox" style={{ '--c': 'var(--c-slate)' }} onClick={() => { resetTips(); toast(tr('화면 안내를 다시 보여 줍니다.')); }} title={tr('화면 안내 다시 보기')} aria-label={tr('화면 안내 다시 보기')}><b>?</b></button>
+              <button className="tbox" style={{ '--c': 'var(--c-slate)' }} onClick={() => { resetTips(); toast(tr('화면 안내를 다시 보여 줍니다.')); }} title={tr('화면 안내 다시 보기')} aria-label={tr('화면 안내 다시 보기')}><Icon name="help" /></button>
               <FontSelect />
               <LangSelect lang={lang} onChange={changeLang} />
               <ContentTrToggle />
               <span className="tbox me" style={{ '--c': 'var(--c-purple)' }}><span className="avatar" style={{ background: personColor(user.id) }}>{(user.name || '?').slice(0, 1)}</span>{user.name}{user.role === 'admin' ? ` (${tr('관리자')})` : ''}</span>
-              <button className="tbox" style={{ '--c': 'var(--c-orange)' }} onClick={() => setPwOpen(true)}>{tr('비밀번호 변경')}</button>
-              <button className="tbox" style={{ '--c': 'var(--c-red)' }} onClick={logout}>{tr('로그아웃')}</button>
+              <button className="tbox" style={{ '--c': 'var(--c-orange)' }} onClick={() => setPwOpen(true)}><Icon name="key" />{tr('비밀번호 변경')}</button>
+              <button className="tbox" style={{ '--c': 'var(--c-red)' }} onClick={logout}><Icon name="logout" />{tr('로그아웃')}</button>
             </div>
           </header>
           <PageTip />
@@ -145,24 +149,24 @@ function SideProjects() {
   const live = ps.filter(p => !p.archived);
   const byId = new Map(live.map(p => [p.id, p]));
   const secs = [
-    ['recent', tr('최근 본 프로젝트'), recent.map(id => byId.get(id)).filter(Boolean), 'var(--c-amber)'],
-    ['mine', tr('내 프로젝트'), live.filter(p => p.member), 'var(--c-pink)'],
-    ['others', tr('그 밖의 프로젝트'), live.filter(p => !p.member), 'var(--c-slate)']
+    ['recent', tr('최근 본 프로젝트'), recent.map(id => byId.get(id)).filter(Boolean), 'var(--c-amber)', 'clock'],
+    ['mine', tr('내 프로젝트'), live.filter(p => p.member), 'var(--c-pink)', 'star'],
+    ['others', tr('그 밖의 프로젝트'), live.filter(p => !p.member), 'var(--c-slate)', 'grid']
   ];
   const flip = k => setOpen(o => { const n = { ...o, [k]: o[k] === false }; try { localStorage.setItem('side-sec', JSON.stringify(n)); } catch {} return n; });
   return (
     <div className="side-secs">
       <div className="side-sec" style={{ '--c': 'var(--c-teal)' }}>
-        <div className="side-sec-h" style={{ cursor: 'default' }}>{tr('카테고리')}</div>
+        <div className="side-sec-h" style={{ cursor: 'default' }}><span><Icon name="layers" /> {tr('카테고리')}</span></div>
         {CATEGORIES.map(c => {
           const n = live.filter(p => (p.category || 'construction') === c.key).length;
           if (!n && !catAllowed(user, c.key)) return null;
           return <NavLink key={c.key} to={`/c/${c.key}`} className="sproj scat"><span className="ico" style={{ width: 22, textAlign: 'center' }}>{c.icon}</span><span className="t">{tr(c.name)}</span><span className="small">{n}</span></NavLink>;
         })}
       </div>
-      {secs.filter(([, , l]) => l.length).map(([k, name, list, c]) => (
+      {secs.filter(([, , l]) => l.length).map(([k, name, list, c, ic]) => (
         <div key={k} className="side-sec" style={{ '--c': c }}>
-          <div className="side-sec-h" onClick={() => flip(k)}>{name}<span className="small">{open[k] === false ? '▸' : '▾'}</span></div>
+          <div className="side-sec-h" onClick={() => flip(k)}><span><Icon name={ic} /> {name}</span><span className="small">{open[k] === false ? '▸' : '▾'}</span></div>
           {open[k] !== false && list.map(p => (
             <NavLink key={p.id} to={`/projects/${p.id}`} className="sproj" title={`${tr(CATEGORIES.find(c => c.key === (p.category || 'construction')).name)} · ${p.name}`}>
               <span className="sq" style={{ background: CATEGORIES.find(c => c.key === (p.category || 'construction')).color }} /><span className="t">{p.name}</span>
@@ -200,7 +204,7 @@ function PasswordModal({ onClose }) {
 function AppBar({ children }) {
   return (
     <div className="appbar">
-      <NavLink to="/" className="appbar-t"><span className="appbar-logo" aria-hidden>📅</span>Integra Schedule Management</NavLink>
+      <NavLink to="/" className="appbar-t"><span className="appbar-logo" aria-hidden><Icon name="calendar" /></span>Integra Schedule Management</NavLink>
       <div className="sp" />{children}
     </div>
   );
@@ -208,9 +212,10 @@ function AppBar({ children }) {
 
 export function LangSelect({ lang, onChange }) {
   return (
-    <select className="tbox" style={{ '--c': 'var(--c-blue)' }} value={lang} onChange={e => onChange(e.target.value)} aria-label="Language" title="언어 / Ngôn ngữ / Language">
-      {LANGS.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
-    </select>
+    <label className="tbox tsel" style={{ '--c': 'var(--c-blue)' }} title="언어 / Ngôn ngữ / Language"><Icon name="globe" />
+      <select value={lang} onChange={e => onChange(e.target.value)} aria-label="Language">
+        {LANGS.map(l => <option key={l.code} value={l.code}>{l.name}</option>)}
+      </select></label>
   );
 }
 
@@ -218,5 +223,5 @@ export function LangSelect({ lang, onChange }) {
 function ContentTrToggle() {
   const { available, on } = useContentTrState();
   if (!available) return null;
-  return <span className={`tbox ${on ? 'on' : ''}`} style={{ '--c': 'var(--c-green)' }} role="button" onClick={() => setContentTr(!on)} title={tr('직원이 입력한 작업명·이슈·비고를 화면 언어로 번역해 보여줍니다. 마우스를 올리면 원문이 보입니다.')}>🌐 {tr('내용 번역')}</span>;
+  return <span className={`tbox ${on ? 'on' : ''}`} style={{ '--c': 'var(--c-green)' }} role="button" onClick={() => setContentTr(!on)} title={tr('직원이 입력한 작업명·이슈·비고를 화면 언어로 번역해 보여줍니다. 마우스를 올리면 원문이 보입니다.')}><Icon name="translate" /> {tr('내용 번역')}</span>;
 }

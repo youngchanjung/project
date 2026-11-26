@@ -13,7 +13,7 @@
   --plan:#aab2c2;--plan-soft:#252a33;--soon:#f0b03c;--bar-plan:#7d8799;--today:#ff6b6b;--sat:#7fa6f5;--soon-soft:#3a2f17;--hol:#3a2222;--wkend:#191c23;--wkend-strong:#22262f;--side:#171a21;--hover:#232833;--hold:#b08cf0;--hold-soft:#2b2340;
   --c-blue:#6b9cf5;--c-green:#4cc27e;--c-orange:#f0973c;--c-purple:#b08cf0;--c-teal:#3cc7c2;--c-pink:#f07ab4;--c-red:#f0716a;--c-slate:#9aa4b8;--c-amber:#e8b63c;}}
 *{box-sizing:border-box}
-html,body{margin:0;background:var(--bg);color:var(--text);font:var(--f-md)/1.45 "Malgun Gothic","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif}
+html,body{margin:0;background:var(--bg);color:var(--text);font:var(--f-md)/1.5 "Malgun Gothic","맑은 고딕","Apple SD Gothic Neo","Noto Sans KR",system-ui,sans-serif;letter-spacing:-.01em}
 button,input,select,textarea{font:inherit;color:inherit}
 a{color:var(--accent);text-decoration:none}
 .shell{display:flex;min-height:100vh}
@@ -677,3 +677,110 @@ select.tbox{padding:0 8px}
 /* 왼쪽 메뉴 바탕이 긴 화면 아래까지 이어지도록 */
 .shell:not(.side-off){background:linear-gradient(90deg,var(--side) 269px,var(--line) 269px,var(--line) 270px,var(--bg) 270px)}
 @media(max-width:1000px){.shell:not(.side-off){background:none}}
+
+/* ==== 11/26 최신 디자인 (선 아이콘·둥근 카드·옅은 그림자). 시안 A/B/C 는 html[data-look] 으로 바꿔 봄 ==== */
+:root{--r:14px;--sh-sm:0 1px 2px rgba(16,24,40,.05),0 1px 3px rgba(16,24,40,.07);--sh-md:0 4px 14px rgba(16,24,40,.07),0 1px 3px rgba(16,24,40,.05)}
+.icn{flex:none;vertical-align:-.15em}
+.card{border-radius:var(--r)}
+.btn{border-radius:10px}
+.btn .icn{color:var(--accent)}
+.hh{display:inline-flex;align-items:center;gap:10px}
+.hic{display:inline-flex;align-items:center;justify-content:center;width:36px;height:36px;border-radius:10px;background:color-mix(in srgb,var(--c) 13%,var(--panel));color:var(--c);font-size:var(--f-md)}
+.snav .ico{display:inline-flex;align-items:center;justify-content:center;width:34px;height:34px;border-radius:10px;background:color-mix(in srgb,var(--c) 14%,var(--panel));color:var(--c);flex:none}
+.snav{gap:12px;padding:6px 10px}
+.side-sec-h>span:first-child{display:inline-flex;align-items:center;gap:8px}
+.side-sec-h .icn{color:var(--c)}
+.tbox .icn{color:var(--c)}
+.tsel{padding:0 4px 0 12px;gap:4px}
+.tsel select{border:0;background:transparent;font:inherit;color:inherit;font-weight:inherit;padding:0 6px;height:100%;cursor:pointer;outline:none}
+.tbox-wrap .btn .icn{color:var(--c)}
+.appbar-logo{color:#fff}
+.hchip{border-radius:12px}
+.hev-d .icn,.item .t .icn{color:var(--c-purple)}
+
+/* ---- A: 미니멀 라이트 (Notion·Linear 계열) ---- */
+html[data-look=a] .appbar{background:var(--panel);color:var(--text);border-bottom:1px solid var(--line);min-height:68px}
+html[data-look=a] .appbar-t{color:var(--text);letter-spacing:-.02em}
+html[data-look=a] .appbar-logo{background:linear-gradient(135deg,#3b82f6,#6366f1);box-shadow:0 4px 10px rgba(79,70,229,.3)}
+html[data-look=a] .shell:not(.side-off){background:linear-gradient(90deg,var(--panel) 269px,var(--line) 269px,var(--line) 270px,var(--bg) 270px)}
+html[data-look=a] .side{background:var(--panel)}
+html[data-look=a] .topbar{background:var(--bg);border-bottom:0}
+html[data-look=a] .tbox,html[data-look=a] .tbox-wrap .btn{background:var(--panel);border:1px solid var(--line);color:var(--text);box-shadow:var(--sh-sm);border-radius:10px;font-weight:500}
+html[data-look=a] .tbox:hover,html[data-look=a] .tbox-wrap .btn:hover{background:var(--hover)}
+html[data-look=a] .snav{background:transparent;border:0;color:var(--text);font-weight:600;border-radius:10px}
+html[data-look=a] .snav:hover{background:var(--hover)}
+html[data-look=a] .snav.active{background:color-mix(in srgb,var(--c) 10%,var(--panel));color:color-mix(in srgb,var(--c) 85%,var(--text))}
+html[data-look=a] .snav.active .ico{background:var(--c);color:#fff}
+html[data-look=a] .side-sec{background:var(--bg);border:0;border-radius:12px}
+html[data-look=a] .side-sec-h{color:var(--muted)}
+html[data-look=a] .sproj:hover{background:var(--panel)}
+html[data-look=a] .card{border:1px solid var(--line);box-shadow:var(--sh-sm)}
+html[data-look=a] .hcard{border-top:1px solid var(--line)}
+html[data-look=a] .hcard>h3{color:var(--text)}
+html[data-look=a] .hchip{box-shadow:var(--sh-sm)}
+html[data-look=a] .hproj{border:1px solid var(--line);border-left:1px solid var(--line);background:var(--panel);box-shadow:var(--sh-sm);position:relative;overflow:hidden}
+html[data-look=a] .hproj::before{content:"";position:absolute;left:0;top:0;bottom:0;width:4px;background:var(--pc)}
+html[data-look=a] .hproj:hover{box-shadow:var(--sh-md);border-color:color-mix(in srgb,var(--pc) 40%,var(--line))}
+
+/* ---- B: 다크 사이드바 (업무용 대시보드 계열) ---- */
+html[data-look=b]{--sbg:#111827;--sfg:#d1d5db}
+html[data-look=b] .appbar{background:#0b1120;color:#fff;min-height:68px;border-bottom:1px solid #1f2937}
+html[data-look=b] .appbar-logo{background:linear-gradient(135deg,#38bdf8,#6366f1)}
+html[data-look=b] .shell:not(.side-off){background:linear-gradient(90deg,var(--sbg) 270px,#f1f5f9 270px)}
+html[data-look=b] main.page{background:#f1f5f9}
+html[data-look=b] .maincol{background:#f1f5f9}
+html[data-look=b] .side{background:var(--sbg);border-right:0;color:var(--sfg)}
+html[data-look=b] .side-label{color:#6b7280}
+html[data-look=b] .side .iconbtn{color:#9ca3af}
+html[data-look=b] .side-nav{border-bottom:1px solid #1f2937}
+html[data-look=b] .snav{background:transparent;border:0;color:var(--sfg);font-weight:600;border-radius:10px;position:relative}
+html[data-look=b] .snav .ico{background:color-mix(in srgb,var(--c) 28%,var(--sbg));color:color-mix(in srgb,var(--c) 55%,#fff)}
+html[data-look=b] .snav:hover{background:rgba(255,255,255,.06)}
+html[data-look=b] .snav.active{background:rgba(255,255,255,.09);color:#fff}
+html[data-look=b] .snav.active::before{content:"";position:absolute;left:-10px;top:8px;bottom:8px;width:4px;border-radius:0 4px 4px 0;background:var(--c)}
+html[data-look=b] .snav.active .ico{background:var(--c);color:#fff}
+html[data-look=b] .side-sec{background:rgba(255,255,255,.04);border:1px solid rgba(255,255,255,.06);border-radius:12px}
+html[data-look=b] .side-sec-h{color:#9ca3af}
+html[data-look=b] .side-sec-h .icn{color:color-mix(in srgb,var(--c) 55%,#fff)}
+html[data-look=b] .sproj{color:#e5e7eb}
+html[data-look=b] .sproj .small{color:#9ca3af}
+html[data-look=b] .sproj:hover{background:rgba(255,255,255,.06)}
+html[data-look=b] .sproj.active{background:rgba(255,255,255,.09);color:#fff;box-shadow:inset 3px 0 0 var(--c)}
+html[data-look=b] .topbar{background:#fff;border-bottom:1px solid #e5e7eb}
+html[data-look=b] .tbox,html[data-look=b] .tbox-wrap .btn{background:#f8fafc;border:1px solid #e5e7eb;color:#1f2937;border-radius:10px;font-weight:500}
+html[data-look=b] .tbox:hover{background:#eef2f7}
+html[data-look=b] .card{border:0;box-shadow:var(--sh-sm)}
+html[data-look=b] .hcard{border-top:0}
+html[data-look=b] .hcard>h3{color:#111827}
+html[data-look=b] .hic{background:var(--c);color:#fff}
+html[data-look=b] .hchip{border:0;box-shadow:var(--sh-sm)}
+html[data-look=b] .hchip.late{background:#fff;box-shadow:inset 0 0 0 2px var(--late)}
+html[data-look=b] .hproj{border:1px solid #e5e7eb;border-left:1px solid #e5e7eb;background:#fff;border-top:4px solid var(--pc)}
+html[data-look=b] .hproj:hover{box-shadow:var(--sh-md)}
+
+/* ---- C: 소프트 컬러 (파스텔 카드·둥근 알약 메뉴) ---- */
+html[data-look=c],html[data-look=c] body{background:linear-gradient(160deg,#eef2ff 0%,#f5f3ff 35%,#f8fafc 70%) fixed}
+html[data-look=c] .appbar{background:transparent;color:var(--text);min-height:72px}
+html[data-look=c] .appbar-t{background:linear-gradient(90deg,#2563eb,#7c3aed);-webkit-background-clip:text;background-clip:text;color:transparent;letter-spacing:-.02em}
+html[data-look=c] .appbar-logo{background:linear-gradient(135deg,#2563eb,#7c3aed);box-shadow:0 6px 16px rgba(99,102,241,.35)}
+html[data-look=c] .shell:not(.side-off){background:none}
+html[data-look=c] .side{background:transparent;border-right:0}
+html[data-look=c] .side-nav{border-bottom:0}
+html[data-look=c] .topbar{background:transparent;border-bottom:0}
+html[data-look=c] .tbox,html[data-look=c] .tbox-wrap .btn{background:color-mix(in srgb,var(--c) 12%,#fff);border:0;border-radius:999px;color:color-mix(in srgb,var(--c) 80%,#111);box-shadow:0 1px 2px rgba(16,24,40,.06)}
+html[data-look=c] .snav{background:#fff;border:0;border-radius:16px;color:#1f2937;box-shadow:0 1px 3px rgba(16,24,40,.06);font-weight:600}
+html[data-look=c] .snav:hover{background:color-mix(in srgb,var(--c) 8%,#fff)}
+html[data-look=c] .snav.active{background:linear-gradient(135deg,var(--c),color-mix(in srgb,var(--c) 70%,#7c3aed));color:#fff;box-shadow:0 6px 16px color-mix(in srgb,var(--c) 35%,transparent)}
+html[data-look=c] .snav.active .ico{background:rgba(255,255,255,.22);color:#fff}
+html[data-look=c] .side-sec{background:#fff;border:0;border-radius:18px;box-shadow:0 1px 3px rgba(16,24,40,.06);padding:4px 6px 8px}
+html[data-look=c] .side-sec-h{color:color-mix(in srgb,var(--c) 85%,#111)}
+html[data-look=c] .sproj:hover{background:color-mix(in srgb,var(--c) 9%,#fff)}
+html[data-look=c] .card{border:0;border-radius:20px;box-shadow:0 10px 30px rgba(30,41,59,.06),0 1px 3px rgba(30,41,59,.05)}
+html[data-look=c] .hcard{border-top:0}
+html[data-look=c] .hcard>h3{color:#111827}
+html[data-look=c] .hic{background:linear-gradient(135deg,var(--c),color-mix(in srgb,var(--c) 65%,#7c3aed));color:#fff;border-radius:12px}
+html[data-look=c] .hchip{border:0;border-radius:16px;box-shadow:0 1px 3px rgba(16,24,40,.06)}
+html[data-look=c] .hproj{border:0;border-left:0;border-radius:16px;background:color-mix(in srgb,var(--pc) 8%,#fff)}
+html[data-look=c] .hproj:hover{background:color-mix(in srgb,var(--pc) 14%,#fff)}
+html[data-look=c] .item:hover{background:#f5f7ff}
+html[data-look=c] .btn{border-radius:999px}
