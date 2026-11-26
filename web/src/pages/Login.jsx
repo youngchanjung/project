@@ -30,7 +30,7 @@ export default function Login() {
   };
   return (
     <form className="login" onSubmit={submit}>
-      <h1>{tr('📅 R&D 일정관리')}</h1>
+      <h1>{tr('로그인')}</h1>
       {setup && <div className="ok">{tr('처음 실행입니다. 관리자 계정을 만들어 주세요.')}</div>}
       {err && <div className="err">{err}</div>}
       {!setup && prov.m365 && <>

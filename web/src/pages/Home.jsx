@@ -11,7 +11,7 @@ import { tr } from '../i18n.js';
 import { Tx } from '../contentTr.jsx';
 import DateInput from '../components/DateInput.jsx';
 
-// 홈: 오늘 할 일 중심 (11/25 A안). 프로젝트 목록·카테고리 카드는 '프로젝트' 화면(/projects)으로
+// 홈: 오늘 할 일 중심 (11/25 A안). 11/26 배치: 위 내 프로젝트, 아래 왼쪽 내 할 일 · 오른쪽 다가오는 회의. 프로젝트 목록·카테고리 카드는 '프로젝트' 화면(/projects)으로
 export default function Home() {
   const [projects, setProjects] = useState(null);
   const [work, setWork] = useState(null);
@@ -54,8 +54,25 @@ export default function Home() {
         <button className="btn" onClick={() => setSubscribing(true)} title={tr('내 작업·이슈를 Outlook 달력에 띄웁니다.')} aria-label={tr('Outlook 달력에 구독')}>📅</button>
       </div>
 
+      <div className="card hcard" style={{ '--c': 'var(--c-pink)' }}>
+        <h3>{tr('내 프로젝트')} <Link to="/projects" className="linkbtn">{tr('전체 프로젝트')} →</Link></h3>
+        <div className="hprojs">
+          {mine.map(p => {
+            const s = p.stats, pct = s.tasks ? Math.round(s.done / s.tasks * 100) : 0, pc = catOf(p.category);
+            return (
+              <Link key={p.id} to={`/projects/${p.id}`} className="hproj" title={p.name} style={{ '--pc': pc.color }}>
+                <span className="hproj-top"><span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span>
+                  {s.late > 0 && <span className="badge b-지연">{tr('지연 {n}', { n: s.late })}</span>}</span>
+                <span className="hproj-n">{p.name}</span>
+                <span className="hproj-p"><span className="bar-bg hproj-bar"><i style={{ width: pct + '%' }} /></span><span className="small">{pct}%</span></span>
+              </Link>);
+          })}
+          {!mine.length && <div className="empty">{tr('참여 중인 프로젝트가 없습니다.')} <Link to="/projects">{tr('전체 프로젝트')} →</Link></div>}
+        </div>
+      </div>
+
       <div className="hgrid">
-        <div className="card">
+        <div className="card hcard" style={{ '--c': 'var(--c-green)' }}>
           <h3>{tr('내 할 일')} <Link to="/my" className="linkbtn">{tr('모두 보기')}{undated.length ? ` (+${tr('날짜 없음')} ${undated.length})` : ''} →</Link></h3>
           {late.length > 0 && <><div className="hgrp late">{tr('지연')} {late.length}</div>
             <div className="list">{late.map(t => <MyTaskRow key={t.id} t={t} td={td} onClick={() => openT(t)} />)}</div></>}
@@ -73,7 +90,7 @@ export default function Home() {
         </div>
 
         <div className="hside">
-          <div className="card">
+          <div className="card hcard" style={{ '--c': 'var(--c-purple)' }}>
             <h3>{tr('다가오는 회의·마일스톤')}</h3>
             <div className="list">
               {evs.map(e => (
@@ -84,7 +101,7 @@ export default function Home() {
               {!evs.length && <div className="empty">{tr('2주 안에 회의나 마일스톤이 없습니다.')}</div>}
             </div>
           </div>
-          {issues.length > 0 && <div className="card" id="my-issues">
+          {issues.length > 0 && <div className="card hcard" id="my-issues" style={{ '--c': 'var(--c-orange)' }}>
             <h3>{tr('내 이슈')} <span className="small">{tr('미해결')} {issues.length}{tr('건')}</span></h3>
             <div className="list">
               {[...issues].sort((a, b) => (a.target || '9').localeCompare(b.target || '9')).map(i => (
@@ -97,22 +114,6 @@ export default function Home() {
         </div>
       </div>
 
-      <div className="card">
-        <h3>{tr('내 프로젝트')} <Link to="/projects" className="linkbtn">{tr('전체 프로젝트')} →</Link></h3>
-        <div className="hprojs">
-          {mine.map(p => {
-            const s = p.stats, pct = s.tasks ? Math.round(s.done / s.tasks * 100) : 0, pc = catOf(p.category);
-            return (
-              <Link key={p.id} to={`/projects/${p.id}`} className="hproj" title={p.name}>
-                <span className="catbadge" style={{ '--c': pc.color }}>{pc.icon} {tr(pc.name)}</span>
-                <span className="hproj-n">{p.name}</span>
-                <span className="bar-bg hproj-bar"><i style={{ width: pct + '%' }} /></span><span className="small">{pct}%</span>
-                {s.late > 0 && <span className="badge b-지연">{tr('지연 {n}', { n: s.late })}</span>}
-              </Link>);
-          })}
-          {!mine.length && <div className="empty">{tr('참여 중인 프로젝트가 없습니다.')} <Link to="/projects">{tr('전체 프로젝트')} →</Link></div>}
-        </div>
-      </div>
       {subscribing && <CalendarSubscribe onClose={() => setSubscribing(false)} toast={toast} />}
     </main>
   );
