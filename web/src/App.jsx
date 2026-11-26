@@ -19,8 +19,6 @@ const FONT_SIZES = [['0.8', '작게'], ['0.9', '보통'], ['1', '크게']];
 const applyFont = v => { document.documentElement.style.setProperty('--fs', v); };
 const savedFont = () => { try { const v = localStorage.getItem('font-scale'); if (FONT_SIZES.some(f => f[0] === v)) return v; } catch {} return '1'; };
 applyFont(savedFont());
-// 디자인 시안 미리보기 (A/B/C). 확정 후 하나만 남김
-try { document.documentElement.dataset.look = localStorage.getItem('look') || 'a'; } catch { document.documentElement.dataset.look = 'a'; }
 function FontSelect() {
   const [v, setV] = useState(savedFont);
   const change = e => { const n = e.target.value; setV(n); applyFont(n); try { localStorage.setItem('font-scale', n); } catch {} };
@@ -204,7 +202,7 @@ function PasswordModal({ onClose }) {
 function AppBar({ children }) {
   return (
     <div className="appbar">
-      <NavLink to="/" className="appbar-t"><span className="appbar-logo" aria-hidden><Icon name="calendar" /></span>Integra Schedule Management</NavLink>
+      <NavLink to="/" className="appbar-t"><span className="appbar-logo"><img src="/integra-logo.png" alt="Integra" /></span>Integra Schedule Management</NavLink>
       <div className="sp" />{children}
     </div>
   );
