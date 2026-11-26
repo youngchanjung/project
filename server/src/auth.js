@@ -25,7 +25,8 @@ export const clearSession = res => res.clearCookie(COOKIE);
 export const publicUser = u => u && ({
   id: u.id, username: u.username, name: u.name, email: u.email, role: u.role, active: !!u.active,
   department_id: u.department_id ?? null, employee_no: u.employee_no ?? null, position: u.position ?? null,
-  phone: u.phone ?? null, weekly_hours: u.weekly_hours ?? 40, external: !!u.external, lang: u.lang ?? null, auth_provider: u.auth_provider || 'local', last_login_at: u.last_login_at ?? null
+  phone: u.phone ?? null, weekly_hours: u.weekly_hours ?? 40, external: !!u.external, lang: u.lang ?? null, auth_provider: u.auth_provider || 'local', last_login_at: u.last_login_at ?? null,
+  email_notify: u.email_notify === undefined ? true : !!u.email_notify
 });
 
 export async function loadUser(req, _res, next) {

@@ -20,6 +20,7 @@ export default function Admin() {
         <Departments depts={depts} reload={loadDepts} />
         <Holidays />
         <Backup />
+        <M365 />
       </div>
     </main>
   );
@@ -308,3 +309,45 @@ function Holidays() {
   );
 }
 
+
+// Microsoft 365 연동 상태: 켜진 기능, 최근 기록, 시험 메일, Outlook 다시 맞추기
+function M365() {
+  const { toast } = useApp();
+  const [st, setSt] = useState(null);
+  const [err, setErr] = useState(null);
+  const [busy, setBusy] = useState(false);
+  const [to, setTo] = useState('');
+  const load = () => api.get('/m365').then(setSt).catch(e => setErr(e.message));
+  useEffect(() => { load(); }, []);
+  const act = async (fn, msg) => {
+    setBusy(true); setErr(null);
+    try { const r = await fn(); toast(typeof msg === 'function' ? msg(r) : msg); } catch (e) { setErr(e.message); } finally { setBusy(false); load(); }
+  };
+  if (!st) return <div className="card"><h3>{tr('Microsoft 365 연동')}</h3>{err && <div className="err">{err}</div>}</div>;
+  const f = st.features, s = st.settings;
+  const on = v => <span className={`badge ${v ? 'b-완료' : 'b-보류'}`}>{tr(v ? '켜짐' : '꺼짐')}</span>;
+  return (
+    <div className="card"><h3>{tr('Microsoft 365 연동')} <span className="small">{tr('.env 설정값으로 켜짐')}</span></h3>
+      {err && <div className="err">{err}</div>}
+      {!st.ready && <p className="small">{tr('아직 설정되지 않았습니다. docs/M365_연동_안내.md 대로 Entra ID 에 앱을 등록하고 .env 에 값을 넣은 뒤 서버를 다시 시작하세요. 설정 전에도 아이디·비밀번호 로그인과 화면 알림은 그대로 동작합니다.')}</p>}
+      <div className="tablewrap"><table><tbody>
+        <tr><td>{tr('회사 계정 로그인')}</td><td>{on(f.sso)}</td><td className="small">{f.sso && tr(s.localLogin === 'admin' ? '아이디 로그인은 관리자만' : '아이디 로그인도 함께')}{f.sso && s.autoCreate && ` · ${tr('처음 로그인하면 자동 등록')}`}</td></tr>
+        <tr><td>{tr('메일 알림')}</td><td>{on(f.mail)}</td><td className="small">{s.mailFrom}</td></tr>
+        <tr><td>{tr('Outlook 일정')}</td><td>{on(f.outlook)}</td><td className="small">{f.outlook && `${tr(s.outlookTasks ? '회의 + 담당 작업' : '회의만')} · ${tr('연결된 일정 {n}개', { n: st.links })}`}</td></tr>
+        <tr><td>{tr('Teams 채널 알림')}</td><td>{on(st.teamsProjects > 0)}</td><td className="small">{tr('프로젝트 {n}개 (프로젝트 설정에서 지정)', { n: st.teamsProjects })}</td></tr>
+      </tbody></table></div>
+      <p className="small">{tr('테넌트')}: {s.tenantId || '-'} · {tr('앱')}: {s.clientId || '-'} · {tr('비밀 값')}: {tr(s.secret ? '있음' : '없음')} · {tr('주소')}: {s.publicUrl || tr('(PUBLIC_URL 없음: 메일·Teams 카드에 바로가기 링크가 빠짐)')} · {tr('하루 알림')}: {tr('{n}시', { n: s.dailyHour })}</p>
+      {(f.mail || f.outlook) && <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+        {f.mail && <><input type="email" value={to} onChange={e => setTo(e.target.value)} placeholder={tr('받을 주소 (비우면 내 메일)')} style={{ flex: 1, minWidth: 160 }} />
+          <button className="btn sm" disabled={busy} onClick={() => act(() => api.post('/m365/test-mail', { to }), r => tr('{to} 로 시험 메일을 보냈습니다.', { to: r.to }))}>{tr('시험 메일')}</button></>}
+        {f.outlook && <button className="btn sm" disabled={busy} onClick={() => act(() => api.post('/m365/resync'), r => tr('Outlook 일정을 다시 맞췄습니다: 만듦 {c} · 고침 {u} · 지움 {d} · 실패 {e}', { c: r.created, u: r.updated, d: r.deleted, e: r.error }))}>{tr('Outlook 다시 맞추기')}</button>}
+      </div>}
+      {st.linkErrors.length > 0 && <><h4 className="small" style={{ margin: '10px 0 4px' }}>{tr('Outlook 일정 실패')}</h4>
+        <div className="tablewrap" style={{ maxHeight: 160 }}><table><tbody>{st.linkErrors.map((l, i) => (
+          <tr key={i}><td className="small">{l.task_name || '-'}</td><td className="small">{l.mailbox}</td><td className="small">{l.error}</td></tr>))}</tbody></table></div></>}
+      {st.logs.length > 0 && <><h4 className="small" style={{ margin: '10px 0 4px' }}>{tr('최근 기록')}</h4>
+        <div className="tablewrap" style={{ maxHeight: 200 }}><table><tbody>{st.logs.map(l => (
+          <tr key={l.id}><td className="small nw">{fmtDT(l.at)}</td><td className="small">{l.kind}</td><td>{l.ok ? '✓' : <span className="err-t">✕</span>}</td><td className="small">{l.message}</td></tr>))}</tbody></table></div></>}
+    </div>
+  );
+}

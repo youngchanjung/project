@@ -4,6 +4,7 @@ import { api } from '../api.js';
 import { tr } from '../i18n.js';
 import { fmt } from '../util.js';
 import { Tx } from '../contentTr.jsx';
+import { useApp } from '../App.jsx';
 
 const range = s => String(s || '').split('~').map(fmt).join('~');
 function message(n) {
@@ -42,6 +43,10 @@ export default function Bell() {
   const [data, setData] = useState({ items: [], unread: 0 });
   const [open, setOpen] = useState(false);
   const box = useRef(null);
+  const { user, setUser } = useApp();
+  const [mailOn, setMailOn] = useState(false); // 메일 알림이 설정된 서버인지
+  useEffect(() => { api.get('/auth/providers').then(p => setMailOn(!!p.mail)).catch(() => {}); }, []);
+  const toggleMail = async v => { try { const r = await api.post('/auth/prefs', { email_notify: v }); setUser({ ...user, email_notify: r.user.email_notify }); } catch {} };
   const nav = useNavigate();
   const load = useCallback(() => api.get('/notifications').then(setData).catch(() => {}), []);
   useEffect(() => { load(); const t = setInterval(load, 60000); return () => clearInterval(t); }, [load]);
@@ -73,6 +78,10 @@ export default function Bell() {
             </div>))}
           {!data.items.length && <div className="empty">{tr('새 알림이 없습니다.')}</div>}
         </div>
+        {mailOn && <label className="bell-mail small">
+          <input type="checkbox" checked={user.email_notify !== false} disabled={!user.email} onChange={e => toggleMail(e.target.checked)} />
+          {user.email ? tr('메일로도 받기 ({email})', { email: user.email }) : tr('메일 주소가 없어 메일 알림을 받을 수 없습니다. 관리자에게 등록을 요청하세요.')}
+        </label>}
       </div>}
     </div>
   );

@@ -23,7 +23,7 @@ export const TASK_STATUS = ['미착수', '진행중', '완료', '보류'];
 export const TASK_PRIORITY = ['낮음', '보통', '높음', '긴급'];
 const COLS = ['phase_id', 'code', 'name', 'name_en', 'type', 'owner', 'assignee_id', 'start', 'end',
   'baseline_start', 'baseline_end', 'actual_end', 'not_before', 'status', 'progress', 'is_key', 'ref', 'note', 'sort',
-  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade', 'deadline', 'actual_start', 'parent_id', 'est_hours', 'weight'];
+  'board_column_id', 'priority', 'tags', 'reviewer_id', 'start_time', 'end_time', 'location', 'attendees', 'meeting_url', 'company', 'trade', 'deadline', 'actual_start', 'parent_id', 'est_hours', 'weight', 'teams_meeting'];
 const HHMM = /^([01]\d|2[0-3]):[0-5]\d$/;
 const ymd = () => new Date().toISOString().slice(0, 10);
 
@@ -52,6 +52,7 @@ function clean(body, partial) {
   if (t.type !== undefined && !TASK_TYPES.includes(t.type)) throw new HttpError(400, `유형은 ${TASK_TYPES.join('/')} 중 하나입니다.`);
   if (t.status !== undefined && !TASK_STATUS.includes(t.status)) throw new HttpError(400, `상태는 ${TASK_STATUS.join('/')} 중 하나입니다.`);
   if (t.is_key !== undefined) t.is_key = !!t.is_key;
+  if (t.teams_meeting !== undefined) t.teams_meeting = !!t.teams_meeting;
   if (t.priority !== undefined && !TASK_PRIORITY.includes(t.priority)) throw new HttpError(400, `우선순위는 ${TASK_PRIORITY.join('/')} 중 하나입니다.`);
   for (const f of ['start_time', 'end_time']) if (t[f] !== undefined) {
     t[f] = t[f] ? String(t[f]).slice(0, 5) : null;
