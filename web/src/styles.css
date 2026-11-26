@@ -739,3 +739,7 @@ html,body{background:var(--bg-grad) fixed}
 .appbar-logo,.appbar .appbar-logo{display:inline-flex;align-items:center;background:none;box-shadow:none;height:auto;padding:0;border-radius:0;width:auto}
 .appbar-logo img{height:44px;width:auto;display:block}
 @media(max-width:700px){.appbar-logo img{height:30px}}
+/* 11/26 제목 줄: 로고(남색·주황)가 잘 보이도록 흰 띠 + 아래 주황 선 */
+.appbar,html .appbar{background:#fff;border-bottom:3px solid #f39a1e;box-shadow:0 2px 10px rgba(24,36,72,.08);min-height:72px;padding:10px 24px}
+.appbar-t{background:none;-webkit-background-clip:border-box;background-clip:border-box;color:#18244a}
+@media (prefers-color-scheme:dark){.appbar,html .appbar{background:#18244a;box-shadow:none}.appbar-t{color:#fff}}
